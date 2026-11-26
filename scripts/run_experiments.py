@@ -376,7 +376,8 @@ PROJECT_HINTS = ("av", "ff", "qemu", "qdev", "qobject", "vnc", "kvm", "virtio", 
 def feature_kind(feature: str) -> str:
     """Label a TF-IDF feature (unigram or bigram) for the analysis table.
 
-    Kinds: punctuation / keyword / library call / identifier part / project-specific.
+    Kinds: punctuation / keyword / library call / identifier part / project-specific, plus "number"
+    for numeric literals (they fit none of the five).
     For a bigram the most specific kind of its two tokens is used
     (project-specific > library call > identifier part > keyword > punctuation).
     """
@@ -387,17 +388,20 @@ def feature_kind(feature: str) -> str:
     lib = set(LIBRARY_FUNCTIONS) or {"memcpy", "memset", "memmove", "strcpy", "strncpy", "strcat", "strlen",
                                      "sprintf", "snprintf", "printf", "fprintf", "malloc", "calloc", "realloc",
                                      "free", "read", "write", "open", "close", "assert", "abort", "exit"}
-    rank = ["punctuation", "keyword", "identifier part", "library call", "project-specific"]
+    rank = ["punctuation", "number", "keyword", "identifier part", "library call", "project-specific"]
 
     def one(tok: str) -> str:
         low = tok.lower()
         if not any(ch.isalnum() for ch in tok) or tok in ("<STR>", "<CHR>"):
             return "punctuation"
+        if tok[0].isdigit():
+            return "number"
         if tok in C_KEYWORDS:
             return "keyword"
         if tok in lib:
             return "library call"
-        if low in PROJECT_HINTS or low.startswith(("av_", "ff_", "qemu_", "avcodec", "avformat", "qdev_", "bdrv_")) \
+        if low in PROJECT_HINTS or low.startswith(("av_", "ff_", "qemu_", "avcodec", "avformat", "qdev_", "bdrv_",
+                                                   "target_", "tcg_", "cpu_", "vnc_", "virtio_")) \
                 or tok.startswith(("AV", "FF_", "QEMU", "TCG")):
             return "project-specific"
         return "identifier part"
@@ -608,6 +612,17 @@ def cmd_summarize(_args) -> None:
     all_rows = []
     tf_best = _read_json(RESULTS_DIR / "tfidf_best_params.json", {})
     cb_best = _read_json(RESULTS_DIR / "codebert_best_params.json", {})
+    cb_best = {k: (_r4(v) if isinstance(v, float) and k != "learning_rate" else v) for k, v in cb_best.items()}
+    if cb_best:
+        cb_best["best_epoch_per_seed"], timing = {}, {}
+        for train_name in ("train", "train_augmented"):
+            for seed in SEEDS:
+                log = _read_json(_codebert_dir(train_name, cb_best["learning_rate"], seed) / "train_log.json")
+                if log:
+                    cb_best["best_epoch_per_seed"][f"{train_name}_seed{seed}"] = log["best_epoch"]
+                    timing[f"{train_name}_seed{seed}"] = {"epochs_run": len(log["history"]),
+                                                         "total_secs": log["total_secs"]}
+        summary["codebert_timing"] = timing
     for method, best in (("tfidf_rf", tf_best.get("best_params", {})), ("codebert", cb_best)):
         block, rows = _method_block(evaluation, method, "train", SEEDS)
         all_rows += rows
@@ -699,6 +714,12 @@ def cmd_summarize(_args) -> None:
     ex_block = cmd_examples()
     if ex_block is not None:
         summary["original_examples"] = ex_block
+
+    top_path = RESULTS_DIR / "tfidf_top_features.csv"
+    if top_path.exists():  # keep the kind labels in sync with feature_kind()
+        top = pd.read_csv(top_path, keep_default_na=False)
+        top["kind"] = top["feature"].astype(str).map(feature_kind)
+        top.to_csv(top_path, index=False)
 
     _write_json(summary, RESULTS_DIR / "metrics_summary.json")
     print(json.dumps(summary, indent=2))
