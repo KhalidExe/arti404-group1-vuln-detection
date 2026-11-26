@@ -6,6 +6,7 @@ Run from the repo root inside the venv, in this order:
     python scripts/run_experiments.py download            # dataset -> data/raw/
     python scripts/run_experiments.py clean               # data_prep: cleaned splits + data stats
     python scripts/run_experiments.py rename              # renaming: test_renamed + train_augmented
+    python scripts/run_experiments.py length-baseline     # diagnostic: log(#tokens) only
     python scripts/run_experiments.py tfidf-tune          # dev grid (seed 42)
     python scripts/run_experiments.py tfidf-seeds         # 3 seeds with the best params
     python scripts/run_experiments.py codebert-lr-search  # lr in {1e-5, 2e-5, 3e-5}, seed 42
@@ -227,12 +228,46 @@ def cmd_tfidf_seeds(args) -> None:
         tfidf_rf.save(model, str(path))
         if train_name == "train" and seed == PRIMARY_SEED:
             tfidf_rf.save(model, str(MODELS_DIR / "tfidf_rf_seed42.joblib"))
-            tfidf_rf.top_features(model, k=30).to_csv(RESULTS_DIR / "tfidf_top_features.csv", index=False)
+            top = tfidf_rf.top_features(model, k=30)
+            top["kind"] = top["feature"].map(feature_kind)
+            top.to_csv(RESULTS_DIR / "tfidf_top_features.csv", index=False)
         for split in EVAL_SPLITS:
             df = _load_split(split)
             if df is not None:
                 _save_preds(df, tfidf_rf.predict_proba(model, df["code"].tolist()), "tfidf_rf", train_name, seed, split)
         print(f"tfidf_rf {train_name} seed {seed}: {time.time() - t0:.0f}s")
+
+
+# ----------------------------------------------------------------------------- length-only baseline
+
+def cmd_length_baseline(args) -> None:
+    """Diagnostic baseline: logistic regression on log(number of C tokens) only (seed 42).
+
+    Not a third method. It checks how much of the signal is function length alone.
+    """
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression
+
+    from src import evaluation
+    from src.c_tokenizer import tokenize_c
+
+    splits = _raw_minimal() if args.raw else {s: _load_split(s) for s in ["train"] + EVAL_SPLITS}
+
+    def feat(df):
+        return np.log1p(np.array([len(tokenize_c(c)) for c in df["code"]], dtype=float)).reshape(-1, 1)
+
+    train = splits["train"]
+    clf = LogisticRegression(random_state=PRIMARY_SEED).fit(feat(train), train["label"].values)
+    out = {"coef": float(clf.coef_[0, 0]), "intercept": float(clf.intercept_[0])}
+    for split in EVAL_SPLITS:
+        df = splits.get(split)
+        if df is None:
+            continue
+        prob = clf.predict_proba(feat(df))[:, 1]
+        if not args.raw:
+            _save_preds(df, prob, "length_lr", "train", PRIMARY_SEED, split)
+        out[split] = evaluation.compute_metrics(df["label"].values, (prob >= 0.5).astype(int))
+    print(json.dumps(out, indent=2))
 
 
 # ----------------------------------------------------------------------------- CodeBERT
@@ -329,6 +364,45 @@ def cmd_predict_missing(_args) -> None:
                 _save_preds(df, tfidf_rf.predict_proba(model, df["code"].tolist()), "tfidf_rf", train_name, int(seed), split)
 
 
+C_KEYWORDS = frozenset("""auto break case char const continue default do double else enum extern float for goto if
+inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile
+while _Bool _Complex bool NULL true false""".split())
+PROJECT_HINTS = ("av", "ff", "qemu", "qdev", "qobject", "vnc", "kvm", "virtio", "tcg", "bdrv", "avctx", "avio",
+                 "codec", "mpeg", "h264", "hevc", "vp8", "vp9", "s->", "env", "cpu")
+
+
+def feature_kind(feature: str) -> str:
+    """Label a TF-IDF feature (unigram or bigram) for the analysis table.
+
+    Kinds: punctuation / keyword / library call / identifier part / project-specific.
+    For a bigram the most specific kind of its two tokens is used
+    (project-specific > library call > identifier part > keyword > punctuation).
+    """
+    try:
+        from src.renaming import LIBRARY_FUNCTIONS
+    except Exception:  # renaming.py not integrated yet
+        LIBRARY_FUNCTIONS = frozenset()
+    lib = set(LIBRARY_FUNCTIONS) or {"memcpy", "memset", "memmove", "strcpy", "strncpy", "strcat", "strlen",
+                                     "sprintf", "snprintf", "printf", "fprintf", "malloc", "calloc", "realloc",
+                                     "free", "read", "write", "open", "close", "assert", "abort", "exit"}
+    rank = ["punctuation", "keyword", "identifier part", "library call", "project-specific"]
+
+    def one(tok: str) -> str:
+        low = tok.lower()
+        if not any(ch.isalnum() for ch in tok) or tok in ("<STR>", "<CHR>"):
+            return "punctuation"
+        if tok in C_KEYWORDS:
+            return "keyword"
+        if tok in lib:
+            return "library call"
+        if low in PROJECT_HINTS or low.startswith(("av_", "ff_", "qemu_", "avcodec", "avformat", "qdev_", "bdrv_")) \
+                or tok.startswith(("AV", "FF_", "QEMU", "TCG")):
+            return "project-specific"
+        return "identifier part"
+
+    return max((one(t) for t in feature.split(" ")), key=rank.index)
+
+
 # ----------------------------------------------------------------------------- summary
 
 def _r4(x: float) -> float:
@@ -389,6 +463,11 @@ def cmd_summarize(_args) -> None:
         block, rows = _method_block(evaluation, method, "train", SEEDS)
         all_rows += rows
         summary[method] = {"best_params": best, **block}
+
+    if _pred_path("length_lr", "train", PRIMARY_SEED, "test").exists():
+        block, rows = _method_block(evaluation, "length_lr", "train", [PRIMARY_SEED])
+        all_rows += rows
+        summary["length_baseline"] = {"model": "logistic regression on log(1 + number of C tokens)", **block}
 
     aug = {"seeds_used": []}
     for method in ("tfidf_rf", "codebert"):
@@ -499,6 +578,10 @@ def main() -> None:
                      ("rename", cmd_rename), ("tfidf-smoke", cmd_tfidf_smoke), ("tfidf-tune", cmd_tfidf_tune),
                      ("predict-missing", cmd_predict_missing), ("summarize", cmd_summarize)):
         sub.add_parser(name).set_defaults(func=fn)
+
+    p = sub.add_parser("length-baseline")
+    p.add_argument("--raw", action="store_true", help="quick check on the raw splits (nothing saved)")
+    p.set_defaults(func=cmd_length_baseline)
 
     p = sub.add_parser("tfidf-seeds")
     p.add_argument("--train", default="train", choices=["train", "train_augmented"])
