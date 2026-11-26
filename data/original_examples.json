@@ -1,1 +1,16 @@
-[]
+[
+  {
+    "author": "Mishary",
+    "id": "mishary_1",
+    "label": 1,
+    "code": "int read_record(const uint8_t *pkt, size_t pkt_len, char *out, size_t out_size)\n{\n    uint16_t name_len;\n\n    if (pkt_len < 2)\n        return -1;\n    name_len = (uint16_t)((pkt[0] << 8) | pkt[1]);\n    memcpy(out, pkt + 2, name_len);\n    out[name_len] = '\\0';\n    return name_len;\n}",
+    "why": "name_len is read from the packet and never checked against out_size or pkt_len, so memcpy can write past out and read past pkt (buffer overflow and over-read)."
+  },
+  {
+    "author": "Mishary",
+    "id": "mishary_2",
+    "label": 0,
+    "code": "size_t ring_push(struct ring *r, const int16_t *samples, size_t count)\n{\n    size_t i, free_slots;\n\n    if (!r || !samples || r->capacity == 0)\n        return 0;\n    if (r->head >= r->capacity || r->used > r->capacity)\n        return 0;\n    free_slots = r->capacity - r->used;\n    if (count > free_slots)\n        count = free_slots;\n    for (i = 0; i < count; i++) {\n        r->data[r->head] = samples[i];\n        r->head = (r->head + 1) % r->capacity;\n    }\n    r->used += count;\n    return count;\n}",
+    "why": "head is checked to be inside the buffer, count is cut to the free slots, and head wraps with % capacity, so every write stays inside r->data."
+  }
+]
