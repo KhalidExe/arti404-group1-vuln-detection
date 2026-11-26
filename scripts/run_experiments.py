@@ -14,6 +14,7 @@ Run from the repo root inside the venv, in this order:
     python scripts/run_experiments.py augment             # both methods on train_augmented
     python scripts/run_experiments.py predict-missing     # fill predictions for splits added later
     python scripts/run_experiments.py summarize           # metrics_summary.json, tables, figures
+    python scripts/run_experiments.py examples            # only the original examples (after editing the json)
 
 Predictions are stored per run in results/preds/<method>_<train>_seed<seed>_<split>.csv
 (columns: id, label, prob, pred). summarize builds every table and figure from these files.
@@ -403,6 +404,53 @@ def feature_kind(feature: str) -> str:
     return max((one(t) for t in feature.split(" ")), key=rank.index)
 
 
+# ----------------------------------------------------------------------------- original examples
+
+EXAMPLES_PATH = REPO_ROOT / "data" / "original_examples.json"
+
+
+def cmd_examples(_args=None) -> dict | None:
+    """Predict the team's original examples with the seed-42 models.
+
+    Writes results/original_examples_predictions.csv and returns the summary block. Re-run (or run
+    summarize) whenever data/original_examples.json changes; the sha1 of the json is stored so a stale
+    file can be detected.
+    """
+    import hashlib
+
+    import pandas as pd
+
+    from src import codebert_model as cb
+    from src import tfidf_rf
+    from src.data_prep import clean_code
+
+    tf_path, cb_dir = MODELS_DIR / "tfidf_rf_seed42.joblib", MODELS_DIR / "codebert_seed42"
+    if not (EXAMPLES_PATH.exists() and tf_path.exists() and cb_dir.exists()):
+        print("original examples: models or json missing, skipped")
+        return None
+    raw = EXAMPLES_PATH.read_bytes()
+    ex = pd.DataFrame(json.loads(raw.decode("utf-8")))
+    if ex.empty:
+        print("original examples: json is empty, skipped")
+        return None
+    codes = [clean_code(c) for c in ex["code"]]
+    out = ex[["id", "author", "label"]].copy()
+    out["tfidf_rf_prob"] = tfidf_rf.predict_proba(tfidf_rf.load(str(tf_path)), codes)
+    model, tok = cb.load(str(cb_dir))
+    out["codebert_prob"] = cb.predict_proba(model, tok, codes)
+    for m in ("tfidf_rf", "codebert"):
+        out[f"{m}_pred"] = (out[f"{m}_prob"] >= 0.5).astype(int)
+        out[f"{m}_prob"] = out[f"{m}_prob"].round(4)
+    out = out[["id", "author", "label", "tfidf_rf_pred", "tfidf_rf_prob", "codebert_pred", "codebert_prob"]]
+    out.to_csv(RESULTS_DIR / "original_examples_predictions.csv", index=False)
+    block = {"n": int(len(out)),
+             "tfidf_rf_correct": int((out["tfidf_rf_pred"] == out["label"]).sum()),
+             "codebert_correct": int((out["codebert_pred"] == out["label"]).sum()),
+             "source_sha1": hashlib.sha1(raw).hexdigest()}
+    print(out.to_string(index=False))
+    return block
+
+
 # ----------------------------------------------------------------------------- summary
 
 def _roc_auc(y_true, prob) -> float:
@@ -542,6 +590,10 @@ def cmd_summarize(_args) -> None:
                     rows.append({"method": method, "truncated": bool(flag), "n": len(grp), **{k: _r4(v) for k, v in m.items()}})
         if rows:
             pd.DataFrame(rows).to_csv(RESULTS_DIR / "truncation_table.csv", index=False)
+            summary["truncation"] = {"seed": PRIMARY_SEED, "split": "original_test", "max_len": cb.MAX_LEN}
+            for r in rows:
+                summary["truncation"].setdefault(r["method"], {})["cut" if r["truncated"] else "uncut"] = {
+                    k: r[k] for k in ("n", "accuracy", "macro_f1", "vuln_recall")}
 
         # Figures.
         FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -555,6 +607,10 @@ def cmd_summarize(_args) -> None:
                                                      str(FIG_DIR / f"cm_{method}_{tag}.png"))
         if all("drop" in summary.get(m, {}) for m in ("tfidf_rf", "codebert")):
             evaluation.plot_drop_chart(summary, str(FIG_DIR / "drop_chart.png"))
+
+    ex_block = cmd_examples()
+    if ex_block is not None:
+        summary["original_examples"] = ex_block
 
     _write_json(summary, RESULTS_DIR / "metrics_summary.json")
     print(json.dumps(summary, indent=2))
@@ -598,7 +654,8 @@ def main() -> None:
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, fn in (("env", cmd_env), ("download", cmd_download), ("clean", cmd_clean),
                      ("rename", cmd_rename), ("tfidf-smoke", cmd_tfidf_smoke), ("tfidf-tune", cmd_tfidf_tune),
-                     ("predict-missing", cmd_predict_missing), ("summarize", cmd_summarize)):
+                     ("predict-missing", cmd_predict_missing), ("examples", cmd_examples),
+                     ("summarize", cmd_summarize)):
         sub.add_parser(name).set_defaults(func=fn)
 
     p = sub.add_parser("length-baseline")
