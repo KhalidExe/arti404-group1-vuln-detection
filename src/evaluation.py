@@ -111,16 +111,30 @@ def plot_confusion_matrix(y_true, y_pred, title: str, path: str) -> None:
     plt.close(fig)
 
 
+_METHOD_NAMES = {"tfidf_rf": "TF-IDF + RF", "codebert": "CodeBERT"}
+
+
+def _drop_chart_data(summary: dict) -> dict:
+    """Normalise both accepted summary formats to {display_name: {"original", "renamed"}}."""
+    if any(m in summary for m in _METHOD_NAMES):          # results/metrics_summary.json
+        return {_METHOD_NAMES[m]: {"original": summary[m]["original_test"],
+                                   "renamed": summary[m]["renamed_test"]}
+                for m in _METHOD_NAMES if m in summary}
+    return summary
+
+
 def plot_drop_chart(summary: dict, path: str) -> None:
     """Grouped bars: accuracy and macro F1, per method, original vs renamed test set.
 
-    summary format (each inner dict is the output of aggregate_seeds):
-        {"TF-IDF + RF": {"original": {"accuracy": {"mean", "std"}, "macro_f1": {...}, ...},
-                         "renamed":  {...}},
-         "CodeBERT":    {"original": {...}, "renamed": {...}}}
-    Error bars = std over seeds. The number above each pair is the drop
-    (original - renamed) in percentage points.
+    Accepts either the full results/metrics_summary.json dict, i.e.
+        {"tfidf_rf": {"original_test": AGG, "renamed_test": AGG, ...},
+         "codebert": {"original_test": AGG, "renamed_test": AGG, ...}, ...other keys}
+    or a plain {"TF-IDF + RF": {"original": AGG, "renamed": AGG}, "CodeBERT": {...}},
+    where AGG = {"accuracy": {"mean", "std"}, "macro_f1": {"mean", "std"}, ...}
+    (the output of aggregate_seeds). Error bars = std over seeds. The number above
+    each pair is the drop (original - renamed) in percentage points.
     """
+    summary = _drop_chart_data(summary)
     methods = list(summary)
     conditions = [("original", "Original test", "white", ""),
                   ("renamed", "Renamed test", "0.55", "///")]
@@ -212,5 +226,12 @@ if __name__ == "__main__":
             "CodeBERT": {"original": {"accuracy": s(0.62, 0.01), "macro_f1": s(0.61, 0.01)},
                          "renamed": {"accuracy": s(0.60, 0.01), "macro_f1": s(0.59, 0.01)}}}
     plot_drop_chart(fake, os.path.join(out, "drop.png"))
+    # Same chart from the metrics_summary.json format used by scripts/run_experiments.py
+    full = {"primary_seed": 42, "mcnemar": {},
+            "tfidf_rf": {"best_params": {}, "original_test": fake["TF-IDF + RF"]["original"],
+                         "renamed_test": fake["TF-IDF + RF"]["renamed"], "drop": {}},
+            "codebert": {"best_params": {}, "original_test": fake["CodeBERT"]["original"],
+                         "renamed_test": fake["CodeBERT"]["renamed"], "drop": {}}}
+    plot_drop_chart(full, os.path.join(out, "drop_summary.png"))
     print("figures written to", out)
     print("evaluation self-test passed")
