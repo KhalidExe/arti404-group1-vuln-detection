@@ -33,6 +33,12 @@ def _selected_model() -> str:
 def _probabilities(clean: str) -> dict[str, float]:
     """P(vulnerable) from each saved model that is available."""
     probs: dict[str, float] = {}
+    if not (CODEBERT_DIR.exists() and TFIDF_PATH.exists()):
+        from src.assets import ensure_models
+        try:
+            ensure_models(verbose=False)
+        except Exception as exc:  # offline: use whatever model is on disk
+            print(f"Could not download the saved models ({exc}).")
     if CODEBERT_DIR.exists():
         from src import codebert_model
         if "codebert" not in _cache:
@@ -59,7 +65,7 @@ def try_it(code: str) -> None:
         return
     probs = _probabilities(clean)
     if not probs:
-        print("No saved model found in models/. Run the download cell in the notebook first.")
+        print("No saved model found in models/ and the download failed.")
         return
     names = {"codebert": "CodeBERT (fine-tuned)", "tfidf_rf": "TF-IDF + Random Forest"}
     selected = _selected_model()
