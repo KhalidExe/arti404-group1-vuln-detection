@@ -166,6 +166,7 @@ def cmd_rename(_args) -> None:
     renamed, stats = renaming.build_renamed_split(test)
     renamed.to_parquet(PROC_DIR / "test_renamed.parquet", index=False)
     _write_json(stats, RESULTS_DIR / "renaming_stats.json")
+    renaming.write_examples_md(test, str(RESULTS_DIR / "renaming_examples.md"), k=5)
     aug = renaming.build_augmented_train(train)
     aug.to_parquet(PROC_DIR / "train_augmented.parquet", index=False)
     print(json.dumps(stats, indent=2))
