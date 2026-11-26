@@ -498,6 +498,91 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
     return block, rows
 
 
+PREPROC_RE = __import__("re").compile(r"#\s*(?:if|ifdef|ifndef|else|elif|endif|define|undef|include)\b")
+
+
+def _add_data_extras(summary: dict) -> None:
+    """Preprocessor-directive counts per split and the ids of renamed functions with new parse errors."""
+    counts = {}
+    for name in ("train", "dev", "test"):
+        df = _load_split(name)
+        if df is not None:
+            n = int(df["code"].str.contains(PREPROC_RE).sum())
+            counts[name] = {"count": n, "pct": round(n / len(df), 4)}
+    if counts:
+        summary.setdefault("data", {})["preprocessor_functions"] = counts
+
+    ren_path = RESULTS_DIR / "renaming_stats.json"
+    ren = _read_json(ren_path, {}) or {}
+    test = _load_split("test")
+    if ren and "new_parse_errors_ids" not in ren and test is not None:
+        from src import renaming
+        ids = []
+        for i, code in zip(test["id"], test["code"]):
+            _, info = renaming.rename_identifiers(code)
+            if info["parse_errors_after"] > info["parse_errors_before"]:
+                ids.append(int(i))
+        ren["new_parse_errors_ids"] = ids
+        _write_json(ren, ren_path)
+    summary["renaming"] = ren
+
+
+def _write_error_candidates(tp, test, renamed, k: int = 12) -> None:
+    """results/error_candidates.md: wrong seed-42 predictions for the error analysis.
+
+    Picks the most confident mistakes of each kind: both models wrong, only TF-IDF wrong, only
+    CodeBERT wrong, truncated functions (>512 tokens) and predictions that flip between the
+    original and the renamed version of the same function.
+    """
+    import pandas as pd
+    need = ["tfidf_rf_orig_pred", "codebert_orig_pred"]
+    if not all(c in tp for c in need):
+        return
+    d = tp.copy()
+    d["tf_wrong"] = d["tfidf_rf_orig_pred"] != d["label"]
+    d["cb_wrong"] = d["codebert_orig_pred"] != d["label"]
+    d["tf_conf"] = (d["tfidf_rf_orig_prob"] - 0.5).abs()
+    d["cb_conf"] = (d["codebert_orig_prob"] - 0.5).abs()
+    flips = pd.Series(False, index=d.index)
+    for m in ("tfidf_rf", "codebert"):
+        if f"{m}_ren_pred" in d:
+            d[f"{m}_flip"] = d[f"{m}_orig_pred"] != d[f"{m}_ren_pred"]
+            flips |= d[f"{m}_flip"]
+    d["flip"] = flips
+    groups = [
+        ("Both models wrong", d[d.tf_wrong & d.cb_wrong].assign(c=lambda x: x.tf_conf + x.cb_conf), 3),
+        ("Only TF-IDF + RF wrong", d[d.tf_wrong & ~d.cb_wrong].assign(c=lambda x: x.tf_conf), 2),
+        ("Only CodeBERT wrong", d[~d.tf_wrong & d.cb_wrong].assign(c=lambda x: x.cb_conf), 2),
+        ("Truncated (> 512 tokens), CodeBERT wrong", d[d.truncated & d.cb_wrong].assign(c=lambda x: x.cb_conf), 2),
+        ("Prediction flips after renaming (and is wrong in one version)", d[d.flip & (d.tf_wrong | d.cb_wrong)].assign(c=lambda x: x.tf_conf + x.cb_conf), 3),
+    ]
+    code_by_id = dict(zip(test["id"], test["code"]))
+    ren_by_id = dict(zip(renamed["id"], renamed["code"])) if renamed is not None else {}
+    used, lines = set(), ["# Error candidates (seed 42, original test set)", "",
+                          "Most confident wrong predictions per group. Probabilities are P(vulnerable).", ""]
+    for title, g, n in groups:
+        g = g[~g["id"].isin(used)].sort_values("c", ascending=False).head(n)
+        lines += [f"## {title}", ""]
+        for _, r in g.iterrows():
+            used.add(r["id"])
+            lab = "Vulnerable (1)" if r["label"] == 1 else "Safe (0)"
+            row = (f"- id **{int(r['id'])}**, true label {lab}, {int(r['n_tokens'])} CodeBERT tokens"
+                   f"{' (truncated)' if r['truncated'] else ''}\n"
+                   f"  - TF-IDF + RF: original pred {int(r['tfidf_rf_orig_pred'])} (p={r['tfidf_rf_orig_prob']:.3f})")
+            if "tfidf_rf_ren_pred" in r:
+                row += f", renamed pred {int(r['tfidf_rf_ren_pred'])} (p={r['tfidf_rf_ren_prob']:.3f})"
+            row += f"\n  - CodeBERT: original pred {int(r['codebert_orig_pred'])} (p={r['codebert_orig_prob']:.3f})"
+            if "codebert_ren_pred" in r:
+                row += f", renamed pred {int(r['codebert_ren_pred'])} (p={r['codebert_ren_prob']:.3f})"
+            code = code_by_id[r["id"]]
+            short = code if len(code) <= 700 else code[:700] + " ..."
+            lines += [row, "", "```c", short, "```", ""]
+            if r["flip"] and r["id"] in ren_by_id:
+                rc = ren_by_id[r["id"]]
+                lines += ["  Renamed version:", "", "```c", rc if len(rc) <= 700 else rc[:700] + " ...", "```", ""]
+    (RESULTS_DIR / "error_candidates.md").write_text("\n".join(lines), encoding="utf-8")
+
+
 def cmd_summarize(_args) -> None:
     """Build metrics_summary.json, per_run_metrics.csv, test_predictions.csv, figures and tables."""
     import numpy as np
@@ -510,6 +595,7 @@ def cmd_summarize(_args) -> None:
     summary.update({"primary_seed": PRIMARY_SEED, "seeds": SEEDS})
     summary["data"] = _read_json(RESULTS_DIR / "data_stats.json", {})
     summary["renaming"] = _read_json(RESULTS_DIR / "renaming_stats.json", {})
+    _add_data_extras(summary)
 
     train, test = _load_split("train"), _load_split("test")
     if train is not None and test is not None:
@@ -580,6 +666,7 @@ def cmd_summarize(_args) -> None:
                     tp[f"{method}_{tag}_prob"] = tp["id"].map(d["prob"]).round(4)
                     tp[f"{method}_{tag}_pred"] = tp["id"].map(d["pred"])
         tp.to_csv(RESULTS_DIR / "test_predictions.csv", index=False)
+        _write_error_candidates(tp, test, _load_split("test_renamed"))
 
         # Accuracy on truncated vs non-truncated test functions (primary seed).
         rows = []
