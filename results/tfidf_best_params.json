@@ -1,0 +1,14 @@
+{
+  "best_params": {
+    "ngram_range": [
+      1,
+      1
+    ],
+    "max_features": 50000,
+    "n_estimators": 300,
+    "max_depth": 60,
+    "min_samples_leaf": 2,
+    "class_weight": "balanced"
+  },
+  "grid_secs": 308.8
+}
