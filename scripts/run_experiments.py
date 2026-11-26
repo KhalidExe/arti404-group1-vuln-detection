@@ -416,8 +416,11 @@ def _r4(x: float) -> float:
 
 
 def _agg(evaluation, runs: list[dict]) -> dict:
-    agg = evaluation.aggregate_seeds(runs) if len(runs) > 1 else {k: {"mean": v, "std": 0.0} for k, v in runs[0].items()}
-    return {k: {"mean": _r4(v["mean"]), "std": _r4(v["std"])} for k, v in agg.items()}
+    """mean/std over seeds; with a single seed the std is undefined (null in the JSON)."""
+    if len(runs) > 1:
+        agg = evaluation.aggregate_seeds(runs)
+        return {k: {"mean": _r4(v["mean"]), "std": _r4(v["std"])} for k, v in agg.items()}
+    return {k: {"mean": _r4(v), "std": None} for k, v in runs[0].items()}
 
 
 def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) -> tuple[dict, list[dict]]:
@@ -438,6 +441,7 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
         per_split[key] = runs
         if runs:
             block[key] = _agg(evaluation, runs)
+    block["n_seeds"] = max((len(v) for v in per_split.values()), default=0)
     o, r = per_split.get("original_test", []), per_split.get("renamed_test", [])
     if o and r and len(o) == len(r):
         drops = [{k: a[k] - b[k] for k in ("accuracy", "macro_f1", "roc_auc")} for a, b in zip(o, r)]
