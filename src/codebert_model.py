@@ -190,8 +190,30 @@ def train(
         f"accum={accum} steps/epoch={steps_per_epoch} total_steps={total_steps} device={device}")
 
     history, best, best_epoch, bad_epochs, global_step = [], -1.0, 0, 0, 0
+    start_epoch, stop = 1, False
     t_start = time.time()
-    for epoch in range(1, max_epochs + 1):
+
+    # Resume after an interruption: the state of the last finished epoch is kept in last_state.pt.
+    state_path = out / "last_state.pt"
+    if state_path.exists() and max_steps is None:
+        st = torch.load(state_path, map_location="cpu", weights_only=False)
+        model.load_state_dict(st["model"])
+        optimizer.load_state_dict(st["optimizer"])
+        scheduler.load_state_dict(st["scheduler"])
+        gen.set_state(st["gen_state"])
+        torch.set_rng_state(st["torch_rng"])
+        if device.type == "cuda" and st.get("cuda_rng") is not None:
+            torch.cuda.set_rng_state(st["cuda_rng"])
+        np.random.set_state(st["np_rng"])
+        random.setstate(st["py_rng"])
+        history, best, best_epoch = st["history"], st["best"], st["best_epoch"]
+        bad_epochs, global_step, stop = st["bad_epochs"], st["global_step"], st["stop"]
+        start_epoch = st["epoch"] + 1
+        log(f"resumed from {state_path} after epoch {st['epoch']} (best epoch {best_epoch})")
+
+    for epoch in range(start_epoch, max_epochs + 1):
+        if stop:
+            break
         model.train()
         t_epoch, running, n_batches = time.time(), 0.0, 0
         optimizer.zero_grad(set_to_none=True)
@@ -236,6 +258,16 @@ def train(
             break
         if bad_epochs >= patience:
             log(f"early stop after epoch {epoch} (best epoch {best_epoch})")
+            stop = True
+        if save_model and max_steps is None:
+            torch.save({"model": model.state_dict(), "optimizer": optimizer.state_dict(),
+                        "scheduler": scheduler.state_dict(), "gen_state": gen.get_state(),
+                        "torch_rng": torch.get_rng_state(),
+                        "cuda_rng": torch.cuda.get_rng_state() if device.type == "cuda" else None,
+                        "np_rng": np.random.get_state(), "py_rng": random.getstate(),
+                        "history": history, "best": best, "best_epoch": best_epoch, "bad_epochs": bad_epochs,
+                        "global_step": global_step, "stop": stop, "epoch": epoch}, state_path)
+        if stop:
             break
 
     result = {
@@ -248,6 +280,8 @@ def train(
     }
     with open(out / "train_log.json", "w", encoding="utf-8") as fh:
         json.dump(result, fh, indent=2)
+    if state_path.exists():
+        state_path.unlink()          # the run is complete; the resume state is no longer needed
     return result
 
 
