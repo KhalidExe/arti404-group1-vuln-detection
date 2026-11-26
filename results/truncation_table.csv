@@ -1,0 +1,5 @@
+method,truncated,n,accuracy,macro_f1,vuln_recall
+tfidf_rf,False,1844,0.6508,0.643,0.5617
+tfidf_rf,True,873,0.5097,0.5039,0.6429
+codebert,False,1844,0.6681,0.6418,0.4431
+codebert,True,873,0.5624,0.5489,0.4048

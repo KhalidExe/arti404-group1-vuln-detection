@@ -1,0 +1,5 @@
+id,author,label,tfidf_rf_pred,tfidf_rf_prob,codebert_pred,codebert_prob
+mishary_1,Mishary,1,1,0.5324,0,0.2124
+mishary_2,Mishary,0,1,0.5511,0,0.2167
+ali_1,Ali,1,1,0.5622,1,0.554
+ali_2,Ali,0,1,0.5508,1,0.5765

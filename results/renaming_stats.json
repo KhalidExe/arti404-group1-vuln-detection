@@ -3,5 +3,9 @@
   "mean_identifiers_renamed": 14.83,
   "mean_var_renamed": 9.17,
   "mean_fun_renamed": 5.67,
-  "new_parse_errors": 2
+  "new_parse_errors": 2,
+  "new_parse_errors_ids": [
+    6098,
+    25119
+  ]
 }
