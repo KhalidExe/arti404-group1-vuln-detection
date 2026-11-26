@@ -494,6 +494,14 @@ def cmd_summarize(_args) -> None:
     summary["augmentation"] = aug
     pd.DataFrame(all_rows).to_csv(RESULTS_DIR / "per_run_metrics.csv", index=False)
 
+    # Seed-42 metrics per test set; the notebook recomputes these from the saved models (reproducibility check).
+    summary["primary_seed_runs"] = {}
+    for r in all_rows:
+        if r["train"] == "train" and r["seed"] == PRIMARY_SEED and r["method"] in ("tfidf_rf", "codebert") \
+                and r["split"] in ("test", "test_renamed"):
+            summary["primary_seed_runs"].setdefault(r["method"], {})[r["split"]] = {
+                k: _r4(r[k]) for k in ("accuracy", "macro_f1", "vuln_recall")}
+
     # McNemar on the primary-seed predictions (TF-IDF vs CodeBERT).
     summary["mcnemar"] = {}
     for split, key in (("test", "original_test"), ("test_renamed", "renamed_test")):
