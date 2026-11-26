@@ -405,6 +405,12 @@ def feature_kind(feature: str) -> str:
 
 # ----------------------------------------------------------------------------- summary
 
+def _roc_auc(y_true, prob) -> float:
+    """Area under the ROC curve of P(vulnerable). Secondary metric next to the three main ones."""
+    from sklearn.metrics import roc_auc_score
+    return float(roc_auc_score(y_true, prob))
+
+
 def _r4(x: float) -> float:
     return round(float(x), 4)
 
@@ -426,6 +432,7 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
                 continue
             df = pd.read_csv(p)
             m = evaluation.compute_metrics(df["label"].values, df["pred"].values)
+            m["roc_auc"] = _roc_auc(df["label"].values, df["prob"].values)  # secondary metric
             runs.append(m)
             rows.append({"method": method, "train": train_name, "seed": seed, "split": split, **m})
         per_split[key] = runs
@@ -433,7 +440,7 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
             block[key] = _agg(evaluation, runs)
     o, r = per_split.get("original_test", []), per_split.get("renamed_test", [])
     if o and r and len(o) == len(r):
-        drops = [{"accuracy": a["accuracy"] - b["accuracy"], "macro_f1": a["macro_f1"] - b["macro_f1"]} for a, b in zip(o, r)]
+        drops = [{k: a[k] - b[k] for k in ("accuracy", "macro_f1", "roc_auc")} for a, b in zip(o, r)]
         block["drop"] = _agg(evaluation, drops)
     return block, rows
 
@@ -454,7 +461,10 @@ def cmd_summarize(_args) -> None:
     train, test = _load_split("train"), _load_split("test")
     if train is not None and test is not None:
         mb = evaluation.majority_baseline(train["label"].values, test["label"].values)
-        summary["majority_baseline"] = {"original_test": {k: (_r4(v) if isinstance(v, float) else v) for k, v in mb.items()}}
+        mb_block = {k: (_r4(v) if isinstance(v, float) else v) for k, v in mb.items()}
+        # A constant score ranks nothing: ROC AUC is 0.5 by definition.
+        mb_block["roc_auc"] = 0.5
+        summary["majority_baseline"] = {"original_test": mb_block}
 
     all_rows = []
     tf_best = _read_json(RESULTS_DIR / "tfidf_best_params.json", {})
