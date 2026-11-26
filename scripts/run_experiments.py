@@ -380,7 +380,7 @@ def cmd_summarize(_args) -> None:
     train, test = _load_split("train"), _load_split("test")
     if train is not None and test is not None:
         mb = evaluation.majority_baseline(train["label"].values, test["label"].values)
-        summary["majority_baseline"] = {"original_test": {k: _r4(v) for k, v in mb.items()}}
+        summary["majority_baseline"] = {"original_test": {k: (_r4(v) if isinstance(v, float) else v) for k, v in mb.items()}}
 
     all_rows = []
     tf_best = _read_json(RESULTS_DIR / "tfidf_best_params.json", {})
