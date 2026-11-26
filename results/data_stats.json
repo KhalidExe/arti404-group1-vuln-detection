@@ -1,0 +1,49 @@
+{
+  "official": {
+    "train": 21854,
+    "dev": 2732,
+    "test": 2732
+  },
+  "after_cleaning": {
+    "train": {
+      "n": 21713,
+      "vulnerable": 9946,
+      "safe": 11767
+    },
+    "dev": {
+      "n": 2723,
+      "vulnerable": 1184,
+      "safe": 1539
+    },
+    "test": {
+      "n": 2717,
+      "vulnerable": 1246,
+      "safe": 1471
+    }
+  },
+  "duplicates": {
+    "within_split_removed": 1,
+    "cross_split_removed": 2,
+    "label_conflict_groups": 81,
+    "label_conflict_rows_removed": 162
+  },
+  "test_truncated_512": {
+    "count": 873,
+    "pct": 0.3213
+  },
+  "truncated_512_other_splits": {
+    "train": {
+      "count": 6561,
+      "pct": 0.3022
+    },
+    "dev": {
+      "count": 824,
+      "pct": 0.3026
+    }
+  },
+  "test_token_length": {
+    "median": 294.0,
+    "mean": 584.6,
+    "max": 38735
+  }
+}
