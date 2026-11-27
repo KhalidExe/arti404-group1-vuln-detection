@@ -44,7 +44,13 @@ LOG_DIR = REPO_ROOT / "logs"
 SEEDS = [42, 123, 2026]
 PRIMARY_SEED = 42
 LR_GRID = [1e-5, 2e-5, 3e-5]
-EVAL_SPLITS = ["dev", "test", "test_renamed"]
+EVAL_SPLITS = ["dev", "test", "test_renamed", "test_renamed_words", "test_renamed_var_only", "test_renamed_fun_only"]
+# split file -> key in metrics_summary.json, and the drop key it defines (original - this split)
+TEST_SETS = [("test", "original_test", None), ("test_renamed", "renamed_test", "drop"),
+             ("test_renamed_words", "renamed_words_test", "drop_words"),
+             ("test_renamed_var_only", "renamed_var_only_test", "drop_var_only"),
+             ("test_renamed_fun_only", "renamed_fun_only_test", "drop_fun_only")]
+WORDS_SEED = 2026
 
 
 # ----------------------------------------------------------------------------- helpers
@@ -171,6 +177,62 @@ def cmd_rename(_args) -> None:
     aug.to_parquet(PROC_DIR / "train_augmented.parquet", index=False)
     print(json.dumps(stats, indent=2))
     print("train_augmented rows:", len(aug))
+
+
+def cmd_rename_extra(_args) -> None:
+    """Extra test sets: realistic word names (seed 2026), variables only, function names only."""
+    from src import renaming
+    test = _load_split("test")
+    stats = _read_json(RESULTS_DIR / "renaming_stats.json", {}) or {}
+    lines = ["# Renaming examples, word-name scheme (seed 2026)", ""]
+    for split, kw, key in (("test_renamed_words", {"scheme": "words", "seed": WORDS_SEED}, "words_scheme"),
+                           ("test_renamed_var_only", {"only": "var"}, "var_only"),
+                           ("test_renamed_fun_only", {"only": "fun"}, "fun_only")):
+        df, st = renaming.build_renamed_split(test, **kw)
+        df.to_parquet(PROC_DIR / f"{split}.parquet", index=False)
+        stats[key] = st
+        print(split, json.dumps(st))
+        if key == "words_scheme":
+            for code in test["code"][test["code"].str.len().between(200, 450)].head(2):
+                new, _ = renaming.rename_identifiers(code, scheme="words", seed=WORDS_SEED)
+                lines += ["Before:", "", "```c", code, "```", "", "After:", "", "```c", new, "```", ""]
+    _write_json(stats, RESULTS_DIR / "renaming_stats.json")
+    (RESULTS_DIR / "renaming_words_examples.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def cmd_ensemble(_args) -> None:
+    """Average P(vulnerable) of TF-IDF + RF and CodeBERT (same training set, same seed)."""
+    import pandas as pd
+    n = 0
+    for train_name in ("train", "train_augmented"):
+        for seed in SEEDS:
+            for split in EVAL_SPLITS:
+                a, b = _pred_path("tfidf_rf", train_name, seed, split), _pred_path("codebert", train_name, seed, split)
+                if a.exists() and b.exists():
+                    da, db = pd.read_csv(a), pd.read_csv(b)
+                    assert (da["id"].values == db["id"].values).all()
+                    prob = (da["prob"].values + db["prob"].values) / 2
+                    _save_preds(da, prob, "ensemble", train_name, seed, split)
+                    n += 1
+    print("ensemble prediction files:", n)
+
+
+def cmd_head_tail(_args) -> None:
+    """Re-score the original test set with head (128) + tail (382) tokens for long functions."""
+    import pandas as pd
+
+    from src import codebert_model as cb
+    test = _load_split("test")
+    lr = _read_json(RESULTS_DIR / "codebert_best_params.json")["learning_rate"]
+    lens = cb.token_lengths(cb.load_tokenizer(), test["code"].tolist())
+    cut = lens > cb.MAX_LEN
+    for seed in SEEDS:
+        base = pd.read_csv(_pred_path("codebert", "train", seed, "test"))
+        model, tok = cb.load(str(_codebert_dir("train", lr, seed)))
+        prob = base["prob"].values.copy()
+        prob[cut] = cb.predict_proba_head_tail(model, tok, test["code"][cut].tolist())
+        _save_preds(test, prob, "codebert_head_tail", "train", seed, "test")
+        print(f"seed {seed}: re-scored {int(cut.sum())} truncated functions")
 
 
 # ----------------------------------------------------------------------------- TF-IDF + RF
@@ -480,7 +542,7 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
     """dev / original_test / renamed_test / drop for one method and training set, plus per-run rows."""
     import pandas as pd
     block, rows, per_split = {}, [], {}
-    for split, key in (("dev", "dev"), ("test", "original_test"), ("test_renamed", "renamed_test")):
+    for split, key in [("dev", "dev")] + [(s_, k_) for s_, k_, _ in TEST_SETS]:
         runs = []
         for seed in seeds:
             p = _pred_path(method, train_name, seed, split)
@@ -495,10 +557,12 @@ def _method_block(evaluation, method: str, train_name: str, seeds: list[int]) ->
         if runs:
             block[key] = _agg(evaluation, runs)
     block["n_seeds"] = max((len(v) for v in per_split.values()), default=0)
-    o, r = per_split.get("original_test", []), per_split.get("renamed_test", [])
-    if o and r and len(o) == len(r):
-        drops = [{k: a[k] - b[k] for k in ("accuracy", "macro_f1", "roc_auc")} for a, b in zip(o, r)]
-        block["drop"] = _agg(evaluation, drops)
+    o = per_split.get("original_test", [])
+    for _, key, drop_key in TEST_SETS:
+        r = per_split.get(key, [])
+        if drop_key and o and r and len(o) == len(r):
+            drops = [{k: a[k] - b[k] for k in ("accuracy", "macro_f1", "roc_auc")} for a, b in zip(o, r)]
+            block[drop_key] = _agg(evaluation, drops)
     return block, rows
 
 
@@ -633,8 +697,18 @@ def cmd_summarize(_args) -> None:
         all_rows += rows
         summary["length_baseline"] = {"model": "logistic regression on log(1 + number of C tokens)", **block}
 
+    block, rows = _method_block(evaluation, "ensemble", "train", SEEDS)
+    if block.get("n_seeds"):
+        all_rows += rows
+        summary["ensemble"] = {"model": "mean of P(vulnerable) from TF-IDF + RF and CodeBERT (same seed), threshold 0.5", **block}
+    block, rows = _method_block(evaluation, "codebert_head_tail", "train", SEEDS)
+    if block.get("n_seeds"):
+        all_rows += rows
+        summary["codebert_head_tail"] = {"input": "first 128 + last 382 tokens for functions longer than 512 tokens (evaluation only)",
+                                         "original_test": block["original_test"], "n_seeds": block["n_seeds"]}
+
     aug = {"seeds_used": []}
-    for method in ("tfidf_rf", "codebert"):
+    for method in ("tfidf_rf", "codebert", "ensemble"):
         used = [s for s in SEEDS if _pred_path(method, "train_augmented", s, "test").exists()]
         if used:
             block, rows = _method_block(evaluation, method, "train_augmented", used)
@@ -662,6 +736,15 @@ def cmd_summarize(_args) -> None:
             res = evaluation.mcnemar_test(da["label"].values, da["pred"].values, db["pred"].values)
             summary["mcnemar"][key] = {k: (_r4(v) if isinstance(v, float) else v) for k, v in res.items()}
 
+    # McNemar: ensemble vs CodeBERT (seed 42).
+    summary["mcnemar_ensemble_vs_codebert"] = {}
+    for split, key in (("test", "original_test"), ("test_renamed", "renamed_test"), ("test_renamed_words", "renamed_words_test")):
+        a, b = _pred_path("ensemble", "train", PRIMARY_SEED, split), _pred_path("codebert", "train", PRIMARY_SEED, split)
+        if a.exists() and b.exists():
+            da, db = pd.read_csv(a), pd.read_csv(b)
+            res = evaluation.mcnemar_test(da["label"].values, da["pred"].values, db["pred"].values)
+            summary["mcnemar_ensemble_vs_codebert"][key] = {k: (_r4(v) if isinstance(v, float) else v) for k, v in res.items()}
+
     # Model used by Try it: higher mean dev macro F1 (decided on dev only).
     devs = {m: summary.get(m, {}).get("dev", {}).get("macro_f1", {}).get("mean") for m in ("tfidf_rf", "codebert")}
     if all(v is not None for v in devs.values()):
@@ -673,8 +756,8 @@ def cmd_summarize(_args) -> None:
         tp = pd.DataFrame({"id": test["id"].values, "label": test["label"].values})
         tp["n_tokens"] = cb.token_lengths(tok, test["code"].tolist())
         tp["truncated"] = tp["n_tokens"] > cb.MAX_LEN
-        for method in ("tfidf_rf", "codebert"):
-            for split, tag in (("test", "orig"), ("test_renamed", "ren")):
+        for method in ("tfidf_rf", "codebert", "ensemble"):
+            for split, tag in (("test", "orig"), ("test_renamed", "ren"), ("test_renamed_words", "words")):
                 p = _pred_path(method, "train", PRIMARY_SEED, split)
                 if p.exists():
                     d = pd.read_csv(p).set_index("id")
@@ -697,6 +780,12 @@ def cmd_summarize(_args) -> None:
             for r in rows:
                 summary["truncation"].setdefault(r["method"], {})["cut" if r["truncated"] else "uncut"] = {
                     k: r[k] for k in ("n", "accuracy", "macro_f1", "vuln_recall")}
+            ht = _pred_path("codebert_head_tail", "train", PRIMARY_SEED, "test")
+            if ht.exists():
+                d = pd.read_csv(ht).set_index("id")
+                grp = tp[tp["truncated"]]
+                m = evaluation.compute_metrics(grp["label"].values, grp["id"].map(d["pred"]).values)
+                summary["truncation"]["codebert_head_tail"] = {"cut": {"n": len(grp), **{k: _r4(v) for k, v in m.items()}}}
 
         # Figures.
         FIG_DIR.mkdir(parents=True, exist_ok=True)
@@ -762,7 +851,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name, fn in (("env", cmd_env), ("download", cmd_download), ("clean", cmd_clean),
-                     ("rename", cmd_rename), ("tfidf-smoke", cmd_tfidf_smoke), ("tfidf-tune", cmd_tfidf_tune),
+                     ("rename", cmd_rename), ("rename-extra", cmd_rename_extra), ("ensemble", cmd_ensemble),
+                     ("head-tail", cmd_head_tail), ("tfidf-smoke", cmd_tfidf_smoke), ("tfidf-tune", cmd_tfidf_tune),
                      ("predict-missing", cmd_predict_missing), ("examples", cmd_examples),
                      ("summarize", cmd_summarize)):
         sub.add_parser(name).set_defaults(func=fn)
