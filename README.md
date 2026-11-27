@@ -84,6 +84,7 @@ official split 21,854 / 2,732 / 2,732. The cleaned splits are already in `data/p
 python scripts/run_experiments.py download   # Hugging Face google/code_x_glue_cc_defect_detection -> data/raw/
 python scripts/run_experiments.py clean      # comments removed, whitespace collapsed, duplicates resolved
 python scripts/run_experiments.py rename     # renamed test set + augmented training set
+python scripts/run_experiments.py rename-extra   # word-name and partial renamed test sets
 ```
 
 ## Saved models
@@ -109,7 +110,7 @@ Open `vuln_detection.ipynb` and choose **Kernel → Restart Kernel and Run All C
 
 - `RUN_FULL_TRAINING = False` (default): loads the saved models and results, recomputes the seed-42 test
   metrics from the loaded models and checks them against `results/metrics_summary.json`.
-- `RUN_FULL_TRAINING = True`: reruns every experiment (about 4 hours on an RTX 5080). The same steps can be
+- `RUN_FULL_TRAINING = True`: reruns every experiment (about 3 hours on an RTX 5080). The same steps can be
   run from the command line:
 
 ```bash
@@ -118,8 +119,11 @@ python scripts/run_experiments.py tfidf-seeds
 python scripts/run_experiments.py length-baseline
 python scripts/run_experiments.py codebert-lr-search
 python scripts/run_experiments.py codebert-seeds
-python scripts/run_experiments.py augment --method both
+python scripts/run_experiments.py augment --method tfidf_rf --seeds 42 123 2026
+python scripts/run_experiments.py augment --method codebert --seeds 42 123 2026
 python scripts/run_experiments.py predict-missing
+python scripts/run_experiments.py ensemble
+python scripts/run_experiments.py head-tail
 python scripts/run_experiments.py summarize
 ```
 
@@ -132,7 +136,31 @@ try_it("void f(char *s) { char b[64]; strcpy(b, s); }")
 
 ## Results
 
-_Filled in from `results/metrics_summary.json` after the final runs._
+All numbers are read from `results/metrics_summary.json`: test sets after cleaning (2,717 functions), mean ± std over seeds 42, 123 and 2026, in %. Drop = original − renamed (percentage points).
+
+| Model | Test set | Accuracy | Macro F1 | Vulnerable recall | ROC AUC |
+|---|---|---|---|---|---|
+| Majority baseline | original | 54.14 | 35.12 | 0.00 | 50.00 |
+| TF-IDF + RF | original | 60.08 ± 0.50 | 59.89 ± 0.53 | 58.00 ± 1.02 | 65.01 ± 0.13 |
+| TF-IDF + RF | renamed (VARn/FUNn) | 60.54 ± 0.54 | 59.93 ± 0.56 | 52.46 ± 0.80 | 65.74 ± 0.35 |
+| TF-IDF + RF | renamed (word names) | 58.79 ± 0.13 | 58.53 ± 0.20 | 55.56 ± 1.30 | 63.37 ± 0.05 |
+| TF-IDF + RF | **drop VARn/FUNn** | **-0.47 ± 1.01** | **-0.04 ± 1.06** | | -0.73 ± 0.25 |
+| CodeBERT | original | 63.81 ± 0.95 | 62.10 ± 1.33 | 46.58 ± 3.70 | 70.75 ± 0.75 |
+| CodeBERT | renamed (VARn/FUNn) | 59.15 ± 1.76 | 58.55 ± 2.24 | 52.51 ± 7.77 | 62.67 ± 2.40 |
+| CodeBERT | renamed (word names) | 59.21 ± 1.01 | 58.66 ± 0.30 | 55.32 ± 9.36 | 63.86 ± 1.02 |
+| CodeBERT | **drop VARn/FUNn** | **4.66 ± 0.99** | **3.55 ± 1.00** | | 8.08 ± 1.66 |
+
+**Augmented training** (original + renamed copies):
+
+| Model | Original accuracy | Renamed accuracy | Drop accuracy | Drop macro F1 |
+|---|---|---|---|---|
+| TF-IDF + RF (augmented) | 59.93 ± 0.51 | 58.72 ± 0.54 | 1.21 ± 0.32 | 1.34 ± 0.31 |
+| CodeBERT (augmented) | 63.22 ± 0.86 | 63.15 ± 0.85 | 0.07 ± 1.06 | 0.12 ± 1.72 |
+
+- McNemar (seed 42, TF-IDF + RF vs CodeBERT): original test p = 0.0087 (CodeBERT better), renamed test p = 0.0221 (TF-IDF + RF better).
+- 32.13% of the test functions are longer than 512 CodeBERT tokens; CodeBERT accuracy on them is 56.24% vs 66.81% on the rest.
+- Finding: CodeBERT is more accurate on the original code but loses more when names are replaced; the TF-IDF model, whose top features are punctuation, keywords and type names, barely changes. Training on renamed copies removes most of CodeBERT's drop.
+- More tables (partial renaming, ensemble, head + tail input, top features, error cases) are in the notebook and in `results/`.
 
 ## Credits
 
