@@ -119,6 +119,40 @@ def predict_proba(model, tokenizer, codes: list[str], batch_size: int = 32) -> n
     return probs
 
 
+@torch.no_grad()
+def predict_proba_head_tail(model, tokenizer, codes: list[str], head: int = 128, tail: int = 382,
+                            batch_size: int = 32) -> np.ndarray:
+    """P(vulnerable) when a long function keeps its first `head` and last `tail` tokens.
+
+    Evaluation-only variant (no retraining): instead of cutting after the first 510 tokens, the
+    middle of the function is dropped, so the end of the function is also seen. Functions that fit
+    into 512 tokens are encoded exactly as in predict_proba.
+    """
+    codes = list(codes)
+    if not codes:
+        return np.zeros(0, dtype=np.float32)
+    device = next(model.parameters()).device
+    model.eval()
+    enc = tokenizer(codes, add_special_tokens=False, truncation=False)["input_ids"]
+    keep = MAX_LEN - 2
+    ids = []
+    for t in enc:
+        if len(t) > keep:
+            t = t[:head] + t[-tail:]
+        ids.append([tokenizer.cls_token_id] + t + [tokenizer.sep_token_id])
+    order = np.argsort([len(x) for x in ids])
+    collator = DataCollatorWithPadding(tokenizer)
+    probs = np.zeros(len(codes), dtype=np.float32)
+    for start in range(0, len(order), batch_size):
+        idx = order[start:start + batch_size]
+        batch = collator([{"input_ids": ids[int(i)], "attention_mask": [1] * len(ids[int(i)])} for i in idx])
+        batch = {k: v.to(device) for k, v in batch.items()}
+        with torch.autocast(device_type=device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"):
+            logits = model(**batch).logits
+        probs[idx] = torch.softmax(logits.float(), dim=-1)[:, 1].cpu().numpy()
+    return probs
+
+
 def train(
     train_df: pd.DataFrame,
     dev_df: pd.DataFrame,
