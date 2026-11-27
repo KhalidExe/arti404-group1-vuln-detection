@@ -77,7 +77,28 @@
     "new_parse_errors_ids": [
       6098,
       25119
-    ]
+    ],
+    "words_scheme": {
+      "test_functions_changed_pct": 1.0,
+      "mean_identifiers_renamed": 14.83,
+      "mean_var_renamed": 9.17,
+      "mean_fun_renamed": 5.67,
+      "new_parse_errors": 2
+    },
+    "var_only": {
+      "test_functions_changed_pct": 0.9952,
+      "mean_identifiers_renamed": 9.17,
+      "mean_var_renamed": 9.17,
+      "mean_fun_renamed": 0.0,
+      "new_parse_errors": 1
+    },
+    "fun_only": {
+      "test_functions_changed_pct": 0.961,
+      "mean_identifiers_renamed": 5.67,
+      "mean_var_renamed": 0.0,
+      "mean_fun_renamed": 5.67,
+      "new_parse_errors": 2
+    }
   },
   "majority_baseline": {
     "original_test": {
@@ -154,6 +175,60 @@
         "std": 0.0035
       }
     },
+    "renamed_words_test": {
+      "accuracy": {
+        "mean": 0.5879,
+        "std": 0.0013
+      },
+      "macro_f1": {
+        "mean": 0.5853,
+        "std": 0.002
+      },
+      "vuln_recall": {
+        "mean": 0.5556,
+        "std": 0.013
+      },
+      "roc_auc": {
+        "mean": 0.6337,
+        "std": 0.0005
+      }
+    },
+    "renamed_var_only_test": {
+      "accuracy": {
+        "mean": 0.6145,
+        "std": 0.0004
+      },
+      "macro_f1": {
+        "mean": 0.6124,
+        "std": 0.0007
+      },
+      "vuln_recall": {
+        "mean": 0.5891,
+        "std": 0.0058
+      },
+      "roc_auc": {
+        "mean": 0.6665,
+        "std": 0.0014
+      }
+    },
+    "renamed_fun_only_test": {
+      "accuracy": {
+        "mean": 0.6025,
+        "std": 0.0013
+      },
+      "macro_f1": {
+        "mean": 0.5973,
+        "std": 0.0011
+      },
+      "vuln_recall": {
+        "mean": 0.5326,
+        "std": 0.0023
+      },
+      "roc_auc": {
+        "mean": 0.6501,
+        "std": 0.0023
+      }
+    },
     "n_seeds": 3,
     "drop": {
       "accuracy": {
@@ -167,6 +242,48 @@
       "roc_auc": {
         "mean": -0.0073,
         "std": 0.0025
+      }
+    },
+    "drop_words": {
+      "accuracy": {
+        "mean": 0.0129,
+        "std": 0.0063
+      },
+      "macro_f1": {
+        "mean": 0.0135,
+        "std": 0.0072
+      },
+      "roc_auc": {
+        "mean": 0.0164,
+        "std": 0.0015
+      }
+    },
+    "drop_var_only": {
+      "accuracy": {
+        "mean": -0.0137,
+        "std": 0.0054
+      },
+      "macro_f1": {
+        "mean": -0.0135,
+        "std": 0.0058
+      },
+      "roc_auc": {
+        "mean": -0.0164,
+        "std": 0.0022
+      }
+    },
+    "drop_fun_only": {
+      "accuracy": {
+        "mean": -0.0017,
+        "std": 0.0038
+      },
+      "macro_f1": {
+        "mean": 0.0016,
+        "std": 0.0043
+      },
+      "roc_auc": {
+        "mean": 0.0,
+        "std": 0.0011
       }
     }
   },
@@ -240,6 +357,60 @@
         "std": 0.024
       }
     },
+    "renamed_words_test": {
+      "accuracy": {
+        "mean": 0.5921,
+        "std": 0.0101
+      },
+      "macro_f1": {
+        "mean": 0.5866,
+        "std": 0.003
+      },
+      "vuln_recall": {
+        "mean": 0.5532,
+        "std": 0.0936
+      },
+      "roc_auc": {
+        "mean": 0.6386,
+        "std": 0.0102
+      }
+    },
+    "renamed_var_only_test": {
+      "accuracy": {
+        "mean": 0.6227,
+        "std": 0.0141
+      },
+      "macro_f1": {
+        "mean": 0.6199,
+        "std": 0.0109
+      },
+      "vuln_recall": {
+        "mean": 0.5963,
+        "std": 0.0412
+      },
+      "roc_auc": {
+        "mean": 0.684,
+        "std": 0.0123
+      }
+    },
+    "renamed_fun_only_test": {
+      "accuracy": {
+        "mean": 0.6189,
+        "std": 0.0125
+      },
+      "macro_f1": {
+        "mean": 0.5956,
+        "std": 0.0234
+      },
+      "vuln_recall": {
+        "mean": 0.4197,
+        "std": 0.0752
+      },
+      "roc_auc": {
+        "mean": 0.6695,
+        "std": 0.019
+      }
+    },
     "n_seeds": 3,
     "drop": {
       "accuracy": {
@@ -253,6 +424,48 @@
       "roc_auc": {
         "mean": 0.0808,
         "std": 0.0166
+      }
+    },
+    "drop_words": {
+      "accuracy": {
+        "mean": 0.046,
+        "std": 0.0042
+      },
+      "macro_f1": {
+        "mean": 0.0343,
+        "std": 0.0124
+      },
+      "roc_auc": {
+        "mean": 0.0689,
+        "std": 0.0068
+      }
+    },
+    "drop_var_only": {
+      "accuracy": {
+        "mean": 0.0153,
+        "std": 0.0047
+      },
+      "macro_f1": {
+        "mean": 0.001,
+        "std": 0.0037
+      },
+      "roc_auc": {
+        "mean": 0.0235,
+        "std": 0.0051
+      }
+    },
+    "drop_fun_only": {
+      "accuracy": {
+        "mean": 0.0191,
+        "std": 0.0031
+      },
+      "macro_f1": {
+        "mean": 0.0254,
+        "std": 0.0111
+      },
+      "roc_auc": {
+        "mean": 0.038,
+        "std": 0.0115
       }
     }
   },
@@ -371,6 +584,60 @@
           "std": 0.0033
         }
       },
+      "renamed_words_test": {
+        "accuracy": {
+          "mean": 0.5861,
+          "std": 0.0081
+        },
+        "macro_f1": {
+          "mean": 0.5844,
+          "std": 0.0083
+        },
+        "vuln_recall": {
+          "mean": 0.5712,
+          "std": 0.0156
+        },
+        "roc_auc": {
+          "mean": 0.6342,
+          "std": 0.0062
+        }
+      },
+      "renamed_var_only_test": {
+        "accuracy": {
+          "mean": 0.6045,
+          "std": 0.0033
+        },
+        "macro_f1": {
+          "mean": 0.6034,
+          "std": 0.0034
+        },
+        "vuln_recall": {
+          "mean": 0.6027,
+          "std": 0.0053
+        },
+        "roc_auc": {
+          "mean": 0.6486,
+          "std": 0.0039
+        }
+      },
+      "renamed_fun_only_test": {
+        "accuracy": {
+          "mean": 0.5934,
+          "std": 0.0022
+        },
+        "macro_f1": {
+          "mean": 0.5897,
+          "std": 0.0018
+        },
+        "vuln_recall": {
+          "mean": 0.5425,
+          "std": 0.0035
+        },
+        "roc_auc": {
+          "mean": 0.6458,
+          "std": 0.0013
+        }
+      },
       "n_seeds": 3,
       "drop": {
         "accuracy": {
@@ -384,6 +651,48 @@
         "roc_auc": {
           "mean": 0.0178,
           "std": 0.0005
+        }
+      },
+      "drop_words": {
+        "accuracy": {
+          "mean": 0.0132,
+          "std": 0.0064
+        },
+        "macro_f1": {
+          "mean": 0.0129,
+          "std": 0.0067
+        },
+        "roc_auc": {
+          "mean": 0.0152,
+          "std": 0.0039
+        }
+      },
+      "drop_var_only": {
+        "accuracy": {
+          "mean": -0.0052,
+          "std": 0.0044
+        },
+        "macro_f1": {
+          "mean": -0.0061,
+          "std": 0.0042
+        },
+        "roc_auc": {
+          "mean": 0.0008,
+          "std": 0.0016
+        }
+      },
+      "drop_fun_only": {
+        "accuracy": {
+          "mean": 0.0059,
+          "std": 0.0039
+        },
+        "macro_f1": {
+          "mean": 0.0077,
+          "std": 0.004
+        },
+        "roc_auc": {
+          "mean": 0.0036,
+          "std": 0.0019
         }
       }
     },
@@ -424,6 +733,60 @@
           "std": 0.01
         }
       },
+      "renamed_words_test": {
+        "accuracy": {
+          "mean": 0.621,
+          "std": 0.0099
+        },
+        "macro_f1": {
+          "mean": 0.6168,
+          "std": 0.0079
+        },
+        "vuln_recall": {
+          "mean": 0.5639,
+          "std": 0.0182
+        },
+        "roc_auc": {
+          "mean": 0.6817,
+          "std": 0.0098
+        }
+      },
+      "renamed_var_only_test": {
+        "accuracy": {
+          "mean": 0.6362,
+          "std": 0.005
+        },
+        "macro_f1": {
+          "mean": 0.6277,
+          "std": 0.01
+        },
+        "vuln_recall": {
+          "mean": 0.5342,
+          "std": 0.0523
+        },
+        "roc_auc": {
+          "mean": 0.7003,
+          "std": 0.0088
+        }
+      },
+      "renamed_fun_only_test": {
+        "accuracy": {
+          "mean": 0.629,
+          "std": 0.0059
+        },
+        "macro_f1": {
+          "mean": 0.6141,
+          "std": 0.0152
+        },
+        "vuln_recall": {
+          "mean": 0.4805,
+          "std": 0.0722
+        },
+        "roc_auc": {
+          "mean": 0.7,
+          "std": 0.0068
+        }
+      },
       "n_seeds": 3,
       "drop": {
         "accuracy": {
@@ -437,6 +800,197 @@
         "roc_auc": {
           "mean": 0.0085,
           "std": 0.0068
+        }
+      },
+      "drop_words": {
+        "accuracy": {
+          "mean": 0.0112,
+          "std": 0.0013
+        },
+        "macro_f1": {
+          "mean": 0.0036,
+          "std": 0.0066
+        },
+        "roc_auc": {
+          "mean": 0.0218,
+          "std": 0.0023
+        }
+      },
+      "drop_var_only": {
+        "accuracy": {
+          "mean": -0.004,
+          "std": 0.0088
+        },
+        "macro_f1": {
+          "mean": -0.0074,
+          "std": 0.011
+        },
+        "roc_auc": {
+          "mean": 0.0032,
+          "std": 0.0062
+        }
+      },
+      "drop_fun_only": {
+        "accuracy": {
+          "mean": 0.0032,
+          "std": 0.006
+        },
+        "macro_f1": {
+          "mean": 0.0063,
+          "std": 0.0106
+        },
+        "roc_auc": {
+          "mean": 0.0035,
+          "std": 0.0026
+        }
+      }
+    },
+    "ensemble": {
+      "original_test": {
+        "accuracy": {
+          "mean": 0.6261,
+          "std": 0.0125
+        },
+        "macro_f1": {
+          "mean": 0.6185,
+          "std": 0.0149
+        },
+        "vuln_recall": {
+          "mean": 0.5316,
+          "std": 0.0411
+        },
+        "roc_auc": {
+          "mean": 0.6997,
+          "std": 0.0078
+        }
+      },
+      "renamed_test": {
+        "accuracy": {
+          "mean": 0.6229,
+          "std": 0.0117
+        },
+        "macro_f1": {
+          "mean": 0.6148,
+          "std": 0.0179
+        },
+        "vuln_recall": {
+          "mean": 0.5367,
+          "std": 0.086
+        },
+        "roc_auc": {
+          "mean": 0.6893,
+          "std": 0.0097
+        }
+      },
+      "renamed_words_test": {
+        "accuracy": {
+          "mean": 0.6219,
+          "std": 0.003
+        },
+        "macro_f1": {
+          "mean": 0.6192,
+          "std": 0.0019
+        },
+        "vuln_recall": {
+          "mean": 0.5896,
+          "std": 0.0258
+        },
+        "roc_auc": {
+          "mean": 0.6827,
+          "std": 0.0088
+        }
+      },
+      "renamed_var_only_test": {
+        "accuracy": {
+          "mean": 0.6346,
+          "std": 0.0031
+        },
+        "macro_f1": {
+          "mean": 0.6298,
+          "std": 0.0056
+        },
+        "vuln_recall": {
+          "mean": 0.5709,
+          "std": 0.0361
+        },
+        "roc_auc": {
+          "mean": 0.6987,
+          "std": 0.0084
+        }
+      },
+      "renamed_fun_only_test": {
+        "accuracy": {
+          "mean": 0.627,
+          "std": 0.0096
+        },
+        "macro_f1": {
+          "mean": 0.617,
+          "std": 0.0147
+        },
+        "vuln_recall": {
+          "mean": 0.5139,
+          "std": 0.0601
+        },
+        "roc_auc": {
+          "mean": 0.6976,
+          "std": 0.0071
+        }
+      },
+      "n_seeds": 3,
+      "drop": {
+        "accuracy": {
+          "mean": 0.0032,
+          "std": 0.0072
+        },
+        "macro_f1": {
+          "mean": 0.0037,
+          "std": 0.0118
+        },
+        "roc_auc": {
+          "mean": 0.0104,
+          "std": 0.0058
+        }
+      },
+      "drop_words": {
+        "accuracy": {
+          "mean": 0.0042,
+          "std": 0.0095
+        },
+        "macro_f1": {
+          "mean": -0.0007,
+          "std": 0.0131
+        },
+        "roc_auc": {
+          "mean": 0.017,
+          "std": 0.0021
+        }
+      },
+      "drop_var_only": {
+        "accuracy": {
+          "mean": -0.0086,
+          "std": 0.0118
+        },
+        "macro_f1": {
+          "mean": -0.0114,
+          "std": 0.0135
+        },
+        "roc_auc": {
+          "mean": 0.001,
+          "std": 0.0057
+        }
+      },
+      "drop_fun_only": {
+        "accuracy": {
+          "mean": -0.001,
+          "std": 0.0055
+        },
+        "macro_f1": {
+          "mean": 0.0015,
+          "std": 0.0084
+        },
+        "roc_auc": {
+          "mean": 0.0021,
+          "std": 0.0023
         }
       }
     }
@@ -515,13 +1069,21 @@
         "macro_f1": 0.5489,
         "vuln_recall": 0.4048
       }
+    },
+    "codebert_head_tail": {
+      "cut": {
+        "n": 873,
+        "accuracy": 0.5899,
+        "macro_f1": 0.5876,
+        "vuln_recall": 0.5357
+      }
     }
   },
   "original_examples": {
-    "n": 4,
-    "tfidf_rf_correct": 2,
-    "codebert_correct": 2,
-    "source_sha1": "1d6cb09990666809fab5b5f983bf98966cea2ecd"
+    "n": 6,
+    "tfidf_rf_correct": 4,
+    "codebert_correct": 3,
+    "source_sha1": "6ee2c81f24f5d9040f7ca27e1b8e0ab9d9081c49"
   },
   "codebert_timing": {
     "train_seed42": {
@@ -547,6 +1109,219 @@
     "train_augmented_seed2026": {
       "epochs_run": 6,
       "total_secs": 1562.7
+    }
+  },
+  "ensemble": {
+    "model": "mean of P(vulnerable) from TF-IDF + RF and CodeBERT (same seed), threshold 0.5",
+    "dev": {
+      "accuracy": {
+        "mean": 0.6446,
+        "std": 0.0098
+      },
+      "macro_f1": {
+        "mean": 0.6287,
+        "std": 0.0058
+      },
+      "vuln_recall": {
+        "mean": 0.5042,
+        "std": 0.0198
+      },
+      "roc_auc": {
+        "mean": 0.7174,
+        "std": 0.0036
+      }
+    },
+    "original_test": {
+      "accuracy": {
+        "mean": 0.6342,
+        "std": 0.0059
+      },
+      "macro_f1": {
+        "mean": 0.6215,
+        "std": 0.0102
+      },
+      "vuln_recall": {
+        "mean": 0.4946,
+        "std": 0.0391
+      },
+      "roc_auc": {
+        "mean": 0.7032,
+        "std": 0.0057
+      }
+    },
+    "renamed_test": {
+      "accuracy": {
+        "mean": 0.5959,
+        "std": 0.0163
+      },
+      "macro_f1": {
+        "mean": 0.5902,
+        "std": 0.0208
+      },
+      "vuln_recall": {
+        "mean": 0.5321,
+        "std": 0.0757
+      },
+      "roc_auc": {
+        "mean": 0.6436,
+        "std": 0.0189
+      }
+    },
+    "renamed_words_test": {
+      "accuracy": {
+        "mean": 0.5982,
+        "std": 0.0108
+      },
+      "macro_f1": {
+        "mean": 0.5949,
+        "std": 0.0054
+      },
+      "vuln_recall": {
+        "mean": 0.5829,
+        "std": 0.0746
+      },
+      "roc_auc": {
+        "mean": 0.6486,
+        "std": 0.0091
+      }
+    },
+    "renamed_var_only_test": {
+      "accuracy": {
+        "mean": 0.6269,
+        "std": 0.0127
+      },
+      "macro_f1": {
+        "mean": 0.6247,
+        "std": 0.0102
+      },
+      "vuln_recall": {
+        "mean": 0.6078,
+        "std": 0.0348
+      },
+      "roc_auc": {
+        "mean": 0.6923,
+        "std": 0.0087
+      }
+    },
+    "renamed_fun_only_test": {
+      "accuracy": {
+        "mean": 0.6192,
+        "std": 0.0092
+      },
+      "macro_f1": {
+        "mean": 0.6005,
+        "std": 0.0185
+      },
+      "vuln_recall": {
+        "mean": 0.4468,
+        "std": 0.0733
+      },
+      "roc_auc": {
+        "mean": 0.676,
+        "std": 0.0141
+      }
+    },
+    "n_seeds": 3,
+    "drop": {
+      "accuracy": {
+        "mean": 0.0383,
+        "std": 0.0104
+      },
+      "macro_f1": {
+        "mean": 0.0313,
+        "std": 0.0109
+      },
+      "roc_auc": {
+        "mean": 0.0597,
+        "std": 0.0132
+      }
+    },
+    "drop_words": {
+      "accuracy": {
+        "mean": 0.0359,
+        "std": 0.005
+      },
+      "macro_f1": {
+        "mean": 0.0266,
+        "std": 0.0052
+      },
+      "roc_auc": {
+        "mean": 0.0546,
+        "std": 0.007
+      }
+    },
+    "drop_var_only": {
+      "accuracy": {
+        "mean": 0.0072,
+        "std": 0.0073
+      },
+      "macro_f1": {
+        "mean": -0.0031,
+        "std": 0.0051
+      },
+      "roc_auc": {
+        "mean": 0.011,
+        "std": 0.0031
+      }
+    },
+    "drop_fun_only": {
+      "accuracy": {
+        "mean": 0.015,
+        "std": 0.0052
+      },
+      "macro_f1": {
+        "mean": 0.021,
+        "std": 0.0112
+      },
+      "roc_auc": {
+        "mean": 0.0273,
+        "std": 0.0085
+      }
+    }
+  },
+  "codebert_head_tail": {
+    "input": "first 128 + last 382 tokens for functions longer than 512 tokens (evaluation only)",
+    "original_test": {
+      "accuracy": {
+        "mean": 0.6396,
+        "std": 0.0114
+      },
+      "macro_f1": {
+        "mean": 0.6258,
+        "std": 0.0076
+      },
+      "vuln_recall": {
+        "mean": 0.4896,
+        "std": 0.0224
+      },
+      "roc_auc": {
+        "mean": 0.7085,
+        "std": 0.0076
+      }
+    },
+    "n_seeds": 3
+  },
+  "mcnemar_ensemble_vs_codebert": {
+    "original_test": {
+      "b": 55,
+      "c": 68,
+      "statistic": 1.1707,
+      "p_value": 0.2793,
+      "method": "chi2_cc"
+    },
+    "renamed_test": {
+      "b": 45,
+      "c": 27,
+      "statistic": 4.0139,
+      "p_value": 0.0451,
+      "method": "chi2_cc"
+    },
+    "renamed_words_test": {
+      "b": 75,
+      "c": 55,
+      "statistic": 2.7769,
+      "p_value": 0.0956,
+      "method": "chi2_cc"
     }
   }
 }

@@ -7,5 +7,26 @@
   "new_parse_errors_ids": [
     6098,
     25119
-  ]
+  ],
+  "words_scheme": {
+    "test_functions_changed_pct": 1.0,
+    "mean_identifiers_renamed": 14.83,
+    "mean_var_renamed": 9.17,
+    "mean_fun_renamed": 5.67,
+    "new_parse_errors": 2
+  },
+  "var_only": {
+    "test_functions_changed_pct": 0.9952,
+    "mean_identifiers_renamed": 9.17,
+    "mean_var_renamed": 9.17,
+    "mean_fun_renamed": 0.0,
+    "new_parse_errors": 1
+  },
+  "fun_only": {
+    "test_functions_changed_pct": 0.961,
+    "mean_identifiers_renamed": 5.67,
+    "mean_var_renamed": 0.0,
+    "mean_fun_renamed": 5.67,
+    "new_parse_errors": 2
+  }
 }
