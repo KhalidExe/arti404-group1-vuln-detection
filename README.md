@@ -134,6 +134,31 @@ from src.predict import try_it
 try_it("void f(char *s) { char b[64]; strcpy(b, s); }")
 ```
 
+## Run on a laptop (CPU only)
+
+The notebook and `try_it` also run without a GPU; the models are downloaded from the Release on first use.
+
+```bash
+python3.11 -m venv .venv && .venv\Scripts\activate      # Linux/macOS: source .venv/bin/activate
+pip install torch==2.11.0                                  # CPU build
+pip install -r requirements.txt
+python -m jupyter lab                                      # start it from the venv, in the repo root
+```
+
+For a live demo, run only the cells of the **Try it** section (after the Setup cells); Run All is not needed.
+
+Measured with the GPU hidden (`CUDA_VISIBLE_DEVICES=-1`, 16-thread desktop CPU):
+
+| Step | Time |
+|---|---|
+| Import of the project modules | about 2 s |
+| First `try_it` call (loads both models) | about 3.7 s |
+| Each further `try_it` call | about 0.08 s |
+| Model download from the Release (first run only) | about 3 min (517 MB, depends on the connection) |
+
+A laptop CPU is slower, but a single `try_it` call stays well under a few seconds. On CPU the CodeBERT
+probabilities can differ from the GPU run in the third decimal (fp32 instead of bf16), e.g. 0.401 vs 0.403.
+
 ## Results
 
 All numbers are read from `results/metrics_summary.json`: test sets after cleaning (2,717 functions), mean ± std over seeds 42, 123 and 2026, in %. Drop = original − renamed (percentage points).
