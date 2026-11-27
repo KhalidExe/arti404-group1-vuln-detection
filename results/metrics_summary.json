@@ -1323,5 +1323,347 @@
       "p_value": 0.0956,
       "method": "chi2_cc"
     }
+  },
+  "ensemble_head_tail": {
+    "model": "mean of P(vulnerable) from TF-IDF + RF and head+tail CodeBERT",
+    "original_test": {
+      "accuracy": {
+        "mean": 0.6332,
+        "std": 0.0081
+      },
+      "macro_f1": {
+        "mean": 0.6232,
+        "std": 0.0059
+      },
+      "vuln_recall": {
+        "mean": 0.515,
+        "std": 0.0244
+      },
+      "roc_auc": {
+        "mean": 0.7045,
+        "std": 0.0056
+      }
+    },
+    "n_seeds": 3
+  },
+  "bootstrap_ci": {
+    "tfidf_rf": {
+      "original_test": {
+        "accuracy": {
+          "low": 0.5874,
+          "high": 0.6231
+        },
+        "macro_f1": {
+          "low": 0.5857,
+          "high": 0.6212
+        }
+      },
+      "renamed_test": {
+        "accuracy": {
+          "low": 0.5859,
+          "high": 0.6209
+        },
+        "macro_f1": {
+          "low": 0.5793,
+          "high": 0.6138
+        }
+      },
+      "drop": {
+        "accuracy": {
+          "low": -0.014,
+          "high": 0.018
+        },
+        "macro_f1": {
+          "low": -0.0088,
+          "high": 0.023
+        }
+      }
+    },
+    "codebert": {
+      "original_test": {
+        "accuracy": {
+          "low": 0.6161,
+          "high": 0.6526
+        },
+        "macro_f1": {
+          "low": 0.5933,
+          "high": 0.6304
+        }
+      },
+      "renamed_test": {
+        "accuracy": {
+          "low": 0.5594,
+          "high": 0.5944
+        },
+        "macro_f1": {
+          "low": 0.5485,
+          "high": 0.5844
+        }
+      },
+      "drop": {
+        "accuracy": {
+          "low": 0.0379,
+          "high": 0.0769
+        },
+        "macro_f1": {
+          "low": 0.025,
+          "high": 0.0671
+        }
+      }
+    },
+    "ensemble": {
+      "original_test": {
+        "accuracy": {
+          "low": 0.6106,
+          "high": 0.6474
+        },
+        "macro_f1": {
+          "low": 0.592,
+          "high": 0.63
+        }
+      },
+      "renamed_test": {
+        "accuracy": {
+          "low": 0.5653,
+          "high": 0.6014
+        },
+        "macro_f1": {
+          "low": 0.5549,
+          "high": 0.5915
+        }
+      },
+      "drop": {
+        "accuracy": {
+          "low": 0.0261,
+          "high": 0.064
+        },
+        "macro_f1": {
+          "low": 0.0176,
+          "high": 0.0578
+        }
+      }
+    },
+    "settings": {
+      "resamples": 1000,
+      "resample_seed": 2026,
+      "runs": "seed 42",
+      "interval": "95% percentile"
+    }
+  },
+  "additional": {
+    "original": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.6008,
+          "std": 0.005
+        },
+        "macro_f1": {
+          "mean": 0.5989,
+          "std": 0.0053
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.6381,
+          "std": 0.0095
+        },
+        "macro_f1": {
+          "mean": 0.621,
+          "std": 0.0133
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.6342,
+          "std": 0.0059
+        },
+        "macro_f1": {
+          "mean": 0.6215,
+          "std": 0.0102
+        }
+      }
+    },
+    "renamed": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.6054,
+          "std": 0.0054
+        },
+        "macro_f1": {
+          "mean": 0.5993,
+          "std": 0.0056
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.5915,
+          "std": 0.0176
+        },
+        "macro_f1": {
+          "mean": 0.5855,
+          "std": 0.0224
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.5959,
+          "std": 0.0163
+        },
+        "macro_f1": {
+          "mean": 0.5902,
+          "std": 0.0208
+        }
+      }
+    },
+    "realistic_names": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.5879,
+          "std": 0.0013
+        },
+        "macro_f1": {
+          "mean": 0.5853,
+          "std": 0.002
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.5921,
+          "std": 0.0101
+        },
+        "macro_f1": {
+          "mean": 0.5866,
+          "std": 0.003
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.5982,
+          "std": 0.0108
+        },
+        "macro_f1": {
+          "mean": 0.5949,
+          "std": 0.0054
+        }
+      }
+    },
+    "realistic_names_aug": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.5861,
+          "std": 0.0081
+        },
+        "macro_f1": {
+          "mean": 0.5844,
+          "std": 0.0083
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.621,
+          "std": 0.0099
+        },
+        "macro_f1": {
+          "mean": 0.6168,
+          "std": 0.0079
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.6219,
+          "std": 0.003
+        },
+        "macro_f1": {
+          "mean": 0.6192,
+          "std": 0.0019
+        }
+      }
+    },
+    "vars_only": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.6145,
+          "std": 0.0004
+        },
+        "macro_f1": {
+          "mean": 0.6124,
+          "std": 0.0007
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.6227,
+          "std": 0.0141
+        },
+        "macro_f1": {
+          "mean": 0.6199,
+          "std": 0.0109
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.6269,
+          "std": 0.0127
+        },
+        "macro_f1": {
+          "mean": 0.6247,
+          "std": 0.0102
+        }
+      }
+    },
+    "funs_only": {
+      "tfidf_rf": {
+        "accuracy": {
+          "mean": 0.6025,
+          "std": 0.0013
+        },
+        "macro_f1": {
+          "mean": 0.5973,
+          "std": 0.0011
+        }
+      },
+      "codebert": {
+        "accuracy": {
+          "mean": 0.6189,
+          "std": 0.0125
+        },
+        "macro_f1": {
+          "mean": 0.5956,
+          "std": 0.0234
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.6192,
+          "std": 0.0092
+        },
+        "macro_f1": {
+          "mean": 0.6005,
+          "std": 0.0185
+        }
+      }
+    },
+    "head_tail": {
+      "codebert": {
+        "accuracy": {
+          "mean": 0.6396,
+          "std": 0.0114
+        },
+        "macro_f1": {
+          "mean": 0.6258,
+          "std": 0.0076
+        }
+      },
+      "ensemble": {
+        "accuracy": {
+          "mean": 0.6332,
+          "std": 0.0081
+        },
+        "macro_f1": {
+          "mean": 0.6232,
+          "std": 0.0059
+        }
+      }
+    }
   }
 }
