@@ -1,0 +1,31 @@
+feature,kind,n_before,n_after_among_before,pct_kept
+},punctuation,2681,2681,1.0
+=,punctuation,2443,2443,1.0
+target_phys_addr_t,project-specific,98,94,0.9592
+;,punctuation,2708,2708,1.0
+phys,identifier part,133,111,0.8346
+0,number,1953,1953,1.0
+",",punctuation,2538,2538,1.0
++,punctuation,1000,1000,1.0
+return,keyword,1768,1759,0.9949
+),punctuation,2717,2717,1.0
+if,keyword,2058,2056,0.999
+<,punctuation,1228,1228,1.0
+{,punctuation,2717,2717,1.0
+*,punctuation,2597,2597,1.0
+static,keyword,1952,1951,0.9995
+int,keyword,1957,1942,0.9923
+(,punctuation,2717,2717,1.0
+t,identifier part,1437,1414,0.984
+addr,identifier part,348,254,0.7299
+->,punctuation,2068,2068,1.0
+void,keyword,1522,1521,0.9993
+1,number,1570,1568,0.9987
+[,punctuation,1325,1325,1.0
+],punctuation,1325,1325,1.0
+av,project-specific,703,631,0.8976
+-,punctuation,1215,1215,1.0
+i,identifier part,684,125,0.1827
+&,punctuation,1709,1709,1.0
+++,punctuation,895,895,1.0
+for,keyword,818,810,0.9902
