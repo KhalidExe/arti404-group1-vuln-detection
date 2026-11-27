@@ -117,9 +117,18 @@ _METHOD_NAMES = {"tfidf_rf": "TF-IDF + RF", "codebert": "CodeBERT"}
 def _drop_chart_data(summary: dict) -> dict:
     """Normalise both accepted summary formats to {display_name: {"original", "renamed"}}."""
     if any(m in summary for m in _METHOD_NAMES):          # results/metrics_summary.json
-        return {_METHOD_NAMES[m]: {"original": summary[m]["original_test"],
-                                   "renamed": summary[m]["renamed_test"]}
-                for m in _METHOD_NAMES if m in summary}
+        out = {}
+        for m in _METHOD_NAMES:
+            if m in summary:
+                out[_METHOD_NAMES[m]] = {"original": summary[m]["original_test"],
+                                         "renamed": summary[m]["renamed_test"]}
+                if "renamed_words_test" in summary[m]:
+                    out[_METHOD_NAMES[m]]["renamed_words"] = summary[m]["renamed_words_test"]
+                # use the stored per-seed drops so the labels match metrics_summary.json exactly
+                for cond, key in (("renamed", "drop"), ("renamed_words", "drop_words")):
+                    if key in summary[m]:
+                        out[_METHOD_NAMES[m]][f"drop_{cond}"] = summary[m][key]
+        return out
     return summary
 
 
@@ -137,9 +146,11 @@ def plot_drop_chart(summary: dict, path: str) -> None:
     summary = _drop_chart_data(summary)
     methods = list(summary)
     conditions = [("original", "Original test", "white", ""),
-                  ("renamed", "Renamed test", "0.55", "///")]
+                  ("renamed", "Renamed test (VARn/FUNn)", "0.55", "///")]
+    if all("renamed_words" in summary[m] for m in methods):
+        conditions.append(("renamed_words", "Renamed test (word names)", "0.85", "..."))
     panels = [("accuracy", "Accuracy"), ("macro_f1", "Macro F1")]
-    width = 0.36
+    width = 0.72 / len(conditions)
     x = np.arange(len(methods))
 
     fig, axes = plt.subplots(1, 2, figsize=(8, 3.8), sharey=True)
@@ -148,7 +159,7 @@ def plot_drop_chart(summary: dict, path: str) -> None:
         for k, (cond, cond_label, color, hatch) in enumerate(conditions):
             means = np.array([summary[m][cond][metric]["mean"] for m in methods])
             stds = np.nan_to_num([summary[m][cond][metric]["std"] for m in methods])
-            pos = x + (k - 0.5) * width
+            pos = x + (k - (len(conditions) - 1) / 2) * width
             bars = ax.bar(pos, means, width, yerr=stds, capsize=4, color=color,
                           edgecolor="black", hatch=hatch, label=cond_label)
             for bar, mean in zip(bars, means):
@@ -157,9 +168,9 @@ def plot_drop_chart(summary: dict, path: str) -> None:
                         bbox=dict(facecolor="white", edgecolor="none", pad=1))
             tops = np.maximum(tops, means + stds)
         for i, m in enumerate(methods):
-            drop = (summary[m]["original"][metric]["mean"]
-                    - summary[m]["renamed"][metric]["mean"]) * 100
-            ax.text(x[i], tops[i] + 0.02, f"drop {drop:.1f} pp", ha="center", fontsize=9)
+            drops = [f"{100 * (summary[m][f'drop_{c}'][metric]['mean'] if f'drop_{c}' in summary[m] else summary[m]['original'][metric]['mean'] - summary[m][c][metric]['mean']):.2f}"
+                     for c, *_ in conditions[1:]]
+            ax.text(x[i], tops[i] + 0.02, "drop " + " / ".join(drops) + " pp", ha="center", fontsize=8)
         ax.set_xticks(x, labels=methods)
         ax.set_title(label)
         ax.set_xlabel("Method")
