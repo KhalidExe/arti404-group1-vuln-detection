@@ -269,10 +269,56 @@ def _is_call_target(node) -> bool:
             and parent.child_by_field_name("function") == node)
 
 
+# ----------------------------------------------------------------------------- word-name scheme
+# Realistic identifier names for the second renaming scheme (Risse & Boehme check): the model
+# must not be able to recognise renamed code just from the VARn / FUNn pattern.
+_NOUNS = """buf len count idx val ptr data size offset state flag entry list key pos ret res cur next
+prev head tail src dst msg pkt frame block chunk word byte line name path mode level limit node item
+total width height index""".split()
+_ADJ = "old new max min tmp raw first last local base".split()
+_VERBS = """get set update read write init free check parse find load store copy reset handle process
+build alloc send fill""".split()
+WORD_VAR_NAMES: tuple[str, ...] = tuple(_NOUNS + [f"{a}_{n}" for a in _ADJ for n in _NOUNS])
+WORD_FUN_NAMES: tuple[str, ...] = tuple(f"{v}_{n}" for v in _VERBS for n in _NOUNS)
+
+
+def _namer(scheme: str, seed: int | None, code: str, existing: set[str]):
+    """Return new_name(kind, k): "VARk"/"FUNk", or a random unused word name for scheme="words"."""
+    if scheme == "varn":
+        return lambda kind, k: f"{kind}{k}"
+    if scheme != "words":
+        raise ValueError(f"unknown scheme {scheme!r}")
+    import random
+    import zlib
+    rng = random.Random((seed or 0) * 1_000_003 + zlib.crc32(code.encode("utf-8")))
+    pools = {"VAR": list(WORD_VAR_NAMES), "FUN": list(WORD_FUN_NAMES)}
+    for pool in pools.values():
+        rng.shuffle(pool)
+    blocked = set(existing) | C_KEYWORDS | LIBRARY_FUNCTIONS | KEEP_IDENTIFIERS
+
+    def new_name(kind: str, _k: int) -> str:
+        pool = pools[kind]
+        while pool:
+            cand = pool.pop()
+            if cand not in blocked:
+                blocked.add(cand)
+                return cand
+        return f"{kind.lower()}_{_k}"          # pools exhausted (very long functions)
+    return new_name
+
+
 # ----------------------------------------------------------------------------- renaming
 
-def rename_identifiers(code: str) -> tuple[str, dict]:
+def rename_identifiers(code: str, scheme: str = "varn", seed: int | None = None,
+                       only: str | None = None) -> tuple[str, dict]:
     """Rename user-defined identifiers in one C function.
+
+    Optional arguments (added by Khalid for the extra robustness tests; the defaults give the
+    original behaviour):
+        scheme: "varn" -> VAR1/FUN1 names; "words" -> realistic random names from WORD_VAR_NAMES /
+            WORD_FUN_NAMES (consistent inside the function, never a name already used in it).
+        seed: random seed for the "words" scheme (combined with a checksum of the code).
+        only: None renames both kinds; "var" renames only variables; "fun" renames only function names.
 
     Returns:
         (renamed_code, info) with
@@ -302,26 +348,37 @@ def rename_identifiers(code: str) -> tuple[str, dict]:
 
     mapping: dict[str, str] = {}
     n_var = n_fun = 0
+    kept: set[str] = set()      # names of the kind that `only` leaves unchanged
+    new_name = _namer(scheme, seed, code, {n.text.decode("utf-8", "replace") for n in nodes})
 
     own = _definition_name_node(root)
     if own is not None:
         own_name = own.text.decode("utf-8", "replace")
         if not _never_rename(own_name):
-            n_fun = 1
-            mapping[own_name] = "FUN1"
+            if only == "var":
+                kept.add(own_name)
+            else:
+                n_fun = 1
+                mapping[own_name] = new_name("FUN", n_fun)
 
     edits: list[tuple[int, int, bytes]] = []
     for node in idents:
         name = node.text.decode("utf-8", "replace")
         if name not in mapping:
-            if _never_rename(name) or name in type_names:
+            if _never_rename(name) or name in type_names or name in kept:
                 continue
             if _is_call_target(node):
+                if only == "var":
+                    kept.add(name)
+                    continue
                 n_fun += 1
-                mapping[name] = f"FUN{n_fun}"
+                mapping[name] = new_name("FUN", n_fun)
             else:
+                if only == "fun":
+                    kept.add(name)
+                    continue
                 n_var += 1
-                mapping[name] = f"VAR{n_var}"
+                mapping[name] = new_name("VAR", n_var)
         edits.append((node.start_byte, node.end_byte, mapping[name].encode("utf-8")))
 
     out = src
@@ -342,7 +399,8 @@ def rename_identifiers(code: str) -> tuple[str, dict]:
     return renamed, info
 
 
-def build_renamed_split(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+def build_renamed_split(df: pd.DataFrame, scheme: str = "varn", seed: int | None = None,
+                        only: str | None = None) -> tuple[pd.DataFrame, dict]:
     """Rename every function in ``df`` (columns id, code, label).
 
     Returns:
@@ -358,7 +416,7 @@ def build_renamed_split(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
     codes, infos = [], []
     for code in df["code"].astype(str):
-        new_code, info = rename_identifiers(code)
+        new_code, info = rename_identifiers(code, scheme=scheme, seed=seed, only=only)
         codes.append(new_code)
         infos.append(info)
 
