@@ -214,6 +214,14 @@ def cmd_ensemble(_args) -> None:
                     prob = (da["prob"].values + db["prob"].values) / 2
                     _save_preds(da, prob, "ensemble", train_name, seed, split)
                     n += 1
+    # Ensemble with the head+tail CodeBERT scores (original test only).
+    for seed in SEEDS:
+        a, b = _pred_path("tfidf_rf", "train", seed, "test"), _pred_path("codebert_head_tail", "train", seed, "test")
+        if a.exists() and b.exists():
+            da, db = pd.read_csv(a), pd.read_csv(b)
+            assert (da["id"].values == db["id"].values).all()
+            _save_preds(da, (da["prob"].values + db["prob"].values) / 2, "ensemble_head_tail", "train", seed, "test")
+            n += 1
     print("ensemble prediction files:", n)
 
 
@@ -651,6 +659,73 @@ def _write_error_candidates(tp, test, renamed, k: int = 12) -> None:
     (RESULTS_DIR / "error_candidates.md").write_text("\n".join(lines), encoding="utf-8")
 
 
+def _fast_metrics(y, p):
+    """Accuracy and macro F1 for 0/1 arrays (vectorised; used inside the bootstrap)."""
+    import numpy as np
+    acc = (y == p).mean()
+    f1s = []
+    for c in (0, 1):
+        tp = np.sum((p == c) & (y == c))
+        fp = np.sum((p == c) & (y != c))
+        fn = np.sum((p != c) & (y == c))
+        f1s.append(0.0 if tp == 0 else 2 * tp / (2 * tp + fp + fn))
+    return acc, (f1s[0] + f1s[1]) / 2
+
+
+def _bootstrap_ci(n_boot: int = 1000, seed: int = 2026) -> dict:
+    """95% percentile CIs (seed-42 runs) for accuracy and macro F1 on the original and renamed test
+    sets, and for the drop with paired resampling (the same resampled ids for both test sets)."""
+    import numpy as np
+    import pandas as pd
+    out = {}
+    for method in ("tfidf_rf", "codebert", "ensemble"):
+        a, b = _pred_path(method, "train", PRIMARY_SEED, "test"), _pred_path(method, "train", PRIMARY_SEED, "test_renamed")
+        if not (a.exists() and b.exists()):
+            continue
+        da, db = pd.read_csv(a), pd.read_csv(b)
+        assert (da["id"].values == db["id"].values).all()
+        y, po, pr = da["label"].values, da["pred"].values, db["pred"].values
+        rng = np.random.default_rng(seed)
+        vals = {k: {"accuracy": [], "macro_f1": []} for k in ("original_test", "renamed_test", "drop")}
+        for _ in range(n_boot):
+            idx = rng.integers(0, len(y), len(y))
+            ao, fo = _fast_metrics(y[idx], po[idx])
+            ar, fr = _fast_metrics(y[idx], pr[idx])
+            for k, (acc, f1) in (("original_test", (ao, fo)), ("renamed_test", (ar, fr)), ("drop", (ao - ar, fo - fr))):
+                vals[k]["accuracy"].append(acc)
+                vals[k]["macro_f1"].append(f1)
+        out[method] = {k: {m: {"low": _r4(np.percentile(v, 2.5)), "high": _r4(np.percentile(v, 97.5))}
+                           for m, v in d.items()} for k, d in vals.items()}
+    if out:
+        out["settings"] = {"resamples": n_boot, "resample_seed": seed, "runs": f"seed {PRIMARY_SEED}", "interval": "95% percentile"}
+    return out
+
+
+def _additional_block(summary: dict) -> dict:
+    """Flat block for the paper's Table VI: additional.<variant>.<method>.<accuracy|macro_f1>.{mean, std}."""
+    def pick(block):
+        return {k: block[k] for k in ("accuracy", "macro_f1")} if block else None
+    variants = {
+        "original": lambda m: summary.get(m, {}).get("original_test"),
+        "renamed": lambda m: summary.get(m, {}).get("renamed_test"),
+        "realistic_names": lambda m: summary.get(m, {}).get("renamed_words_test"),
+        "realistic_names_aug": lambda m: summary.get("augmentation", {}).get(m, {}).get("renamed_words_test"),
+        "vars_only": lambda m: summary.get(m, {}).get("renamed_var_only_test"),
+        "funs_only": lambda m: summary.get(m, {}).get("renamed_fun_only_test"),
+        "head_tail": lambda m: {"codebert": summary.get("codebert_head_tail", {}).get("original_test"),
+                                "ensemble": summary.get("ensemble_head_tail", {}).get("original_test")}.get(m),
+    }
+    add = {}
+    for variant, get in variants.items():
+        for method in ("tfidf_rf", "codebert", "ensemble"):
+            if variant == "head_tail" and method == "tfidf_rf":
+                continue                      # not defined (the paper shows n/a)
+            b = pick(get(method))
+            if b:
+                add.setdefault(variant, {})[method] = b
+    return add
+
+
 def cmd_summarize(_args) -> None:
     """Build metrics_summary.json, per_run_metrics.csv, test_predictions.csv, figures and tables."""
     import numpy as np
@@ -705,6 +780,12 @@ def cmd_summarize(_args) -> None:
     if block.get("n_seeds"):
         all_rows += rows
         summary["codebert_head_tail"] = {"input": "first 128 + last 382 tokens for functions longer than 512 tokens (evaluation only)",
+                                         "original_test": block["original_test"], "n_seeds": block["n_seeds"]}
+
+    block, rows = _method_block(evaluation, "ensemble_head_tail", "train", SEEDS)
+    if block.get("n_seeds"):
+        all_rows += rows
+        summary["ensemble_head_tail"] = {"model": "mean of P(vulnerable) from TF-IDF + RF and head+tail CodeBERT",
                                          "original_test": block["original_test"], "n_seeds": block["n_seeds"]}
 
     aug = {"seeds_used": []}
@@ -799,6 +880,9 @@ def cmd_summarize(_args) -> None:
                                                      str(FIG_DIR / f"cm_{method}_{tag}.png"))
         if all("drop" in summary.get(m, {}) for m in ("tfidf_rf", "codebert")):
             evaluation.plot_drop_chart(summary, str(FIG_DIR / "drop_chart.png"))
+
+    summary["bootstrap_ci"] = _bootstrap_ci()
+    summary["additional"] = _additional_block(summary)
 
     ex_block = cmd_examples()
     if ex_block is not None:
