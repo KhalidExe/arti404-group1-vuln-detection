@@ -165,6 +165,8 @@ def train(
     max_steps: int | None = None,
     save_model: bool = True,
     log_path: str | None = None,
+    model_name: str = MODEL_NAME,
+    grad_ckpt: bool = False,
 ) -> dict:
     """Fine-tune CodeBERT on ``train_df`` and keep the epoch with the best dev macro F1.
 
@@ -178,6 +180,9 @@ def train(
         max_steps: stop after this many optimizer steps (smoke tests only).
         save_model: write the best checkpoint to ``out_dir``.
         log_path: optional text file that gets one line per epoch / progress update.
+        model_name: Hugging Face checkpoint (CodeBERT by default; UniXcoder and CodeT5+ use
+            src/pretrained_models.py with the same training loop).
+        grad_ckpt: gradient checkpointing (saves GPU memory for large models).
 
     Returns:
         dict with lr, seed, best_epoch, best_dev (metrics), history (per epoch), timing.
@@ -195,10 +200,9 @@ def train(
             with open(log_path, "a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
 
-    tokenizer = load_tokenizer()
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME, num_labels=2, attn_implementation="sdpa"
-    ).to(device)
+    from src import pretrained_models
+    tokenizer = load_tokenizer(model_name)
+    model = pretrained_models.build_model(model_name, grad_ckpt=grad_ckpt).to(device)
 
     train_ds = _EncodedDataset(tokenizer, train_df["code"].tolist(), train_df["label"].tolist())
     collator = DataCollatorWithPadding(tokenizer)
@@ -210,7 +214,7 @@ def train(
     total_steps = steps_per_epoch * max_epochs if max_steps is None else max_steps
 
     # No weight decay on biases and LayerNorm weights (standard BERT fine-tuning practice).
-    no_decay = ("bias", "LayerNorm.weight")
+    no_decay = ("bias", "LayerNorm.weight", "layer_norm.weight")
     groups = [
         {"params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
          "weight_decay": WEIGHT_DECAY},
@@ -284,7 +288,7 @@ def train(
         if dev_scores["macro_f1"] > best:
             best, best_epoch, bad_epochs = dev_scores["macro_f1"], epoch, 0
             if save_model:
-                model.save_pretrained(out)
+                pretrained_models.save_model(model, model_name, out)
                 tokenizer.save_pretrained(out)
         else:
             bad_epochs += 1
@@ -305,7 +309,7 @@ def train(
             break
 
     result = {
-        "model": MODEL_NAME, "lr": lr, "seed": seed, "max_len": MAX_LEN,
+        "model": model_name, "lr": lr, "seed": seed, "max_len": MAX_LEN,
         "effective_batch": EFFECTIVE_BATCH, "micro_batch": micro_batch,
         "best_epoch": best_epoch,
         "best_dev": {k.replace("dev_", ""): v for k, v in history[best_epoch - 1].items() if k.startswith("dev_") and k != "dev_secs"},
@@ -321,8 +325,9 @@ def train(
 
 def load(model_dir: str):
     """Load a saved checkpoint. Returns ``(model, tokenizer)`` on GPU if available, in eval mode."""
+    from src import pretrained_models
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(model_dir, attn_implementation="sdpa")
+    model = pretrained_models.load_model(model_dir)
     model.to(get_device()).eval()
     return model, tokenizer
 
