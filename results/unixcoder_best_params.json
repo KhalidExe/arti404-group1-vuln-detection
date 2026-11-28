@@ -1,0 +1,8 @@
+{
+  "model": "microsoft/unixcoder-base",
+  "learning_rate": 1e-05,
+  "best_epoch": 4,
+  "dev_macro_f1": 0.6538063714198599,
+  "batch_size": 32,
+  "max_len": 512
+}

@@ -1,0 +1,10 @@
+{
+  "weights": {
+    "tfidf_rf": 0.0,
+    "codebert": 0.25,
+    "unixcoder": 0.375,
+    "codet5p_220m": 0.375
+  },
+  "dev_macro_f1_mean": 0.6601,
+  "grid": "integer weights 0..3, normalised"
+}

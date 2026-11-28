@@ -1,0 +1,8 @@
+{
+  "model": "Salesforce/codet5p-220m",
+  "learning_rate": 5e-05,
+  "best_epoch": 4,
+  "dev_macro_f1": 0.6543475603997577,
+  "batch_size": 32,
+  "max_len": 512
+}
