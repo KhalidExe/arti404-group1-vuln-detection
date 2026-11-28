@@ -223,6 +223,15 @@ def cmd_official(_args) -> None:
 
 ENSEMBLE_ALL_MODELS = ["tfidf_rf", "codebert", "unixcoder", "codet5p_220m"]
 
+# Published single-model test accuracies on the official CodeXGLUE defect detection split.
+PUBLISHED_REFERENCE = {
+    "codet5p_770m": {"accuracy": 0.667, "source": "CodeT5+ (Wang et al., 2023), Table 9"},
+    "codet5p_220m": {"accuracy": 0.661, "source": "CodeT5+ (Wang et al., 2023), Table 9"},
+    "cotext": {"accuracy": 0.6662, "source": "CoTexT (Phan et al., 2021)"},
+    "codet5_base": {"accuracy": 0.658, "source": "CodeT5 (Wang et al., 2021)"},
+    "codebert": {"accuracy": 0.6208, "source": "CodeXGLUE (Lu et al., 2021)"},
+}
+
 
 def cmd_ensemble_all(_args) -> None:
     """Weighted mean of P(vulnerable) of all 3-seed models; weights chosen on dev (mean macro F1 over seeds)."""
@@ -969,6 +978,19 @@ def cmd_summarize(_args) -> None:
                                                      str(FIG_DIR / f"cm_{method}_{tag}.png"))
         if all("drop" in summary.get(m, {}) for m in ("tfidf_rf", "codebert")):
             evaluation.plot_drop_chart(summary, str(FIG_DIR / "drop_chart.png"))
+
+    # Flat block for the paper (stronger models) and the published numbers we compare against.
+    stronger = {}
+    for m in ("tfidf_rf", "codebert", "unixcoder", "codet5p_220m", "codet5p_770m", "ensemble_all"):
+        b = summary.get(m, {})
+        if not b.get("n_seeds"):
+            continue
+        stronger[m] = {k: {x: b[k][x] for x in ("accuracy", "macro_f1")}
+                       for k in ("official_test", "original_test", "renamed_test", "renamed_words_test", "drop", "drop_words")
+                       if k in b}
+        stronger[m]["n_seeds"] = b["n_seeds"]
+    summary["stronger"] = stronger
+    summary["published_reference"] = PUBLISHED_REFERENCE
 
     summary["bootstrap_ci"] = _bootstrap_ci()
     summary["additional"] = _additional_block(summary)
