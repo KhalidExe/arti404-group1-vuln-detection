@@ -228,7 +228,7 @@ PUBLISHED_REFERENCE = {
     "codet5p_770m": {"accuracy": 0.667, "source": "CodeT5+ (Wang et al., 2023), Table 9"},
     "codet5p_220m": {"accuracy": 0.661, "source": "CodeT5+ (Wang et al., 2023), Table 9"},
     "cotext": {"accuracy": 0.6662, "source": "CoTexT (Phan et al., 2021)"},
-    "codet5_base": {"accuracy": 0.658, "source": "CodeT5 (Wang et al., 2021)"},
+    "codet5_base": {"accuracy": 0.658, "source": "CodeT5+ (Wang et al., 2023), Table 9 (CodeT5 220M)"},
     "codebert": {"accuracy": 0.6208, "source": "CodeXGLUE (Lu et al., 2021)"},
 }
 
