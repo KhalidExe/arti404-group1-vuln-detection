@@ -44,12 +44,21 @@ LOG_DIR = REPO_ROOT / "logs"
 SEEDS = [42, 123, 2026]
 PRIMARY_SEED = 42
 LR_GRID = [1e-5, 2e-5, 3e-5]
-EVAL_SPLITS = ["dev", "test", "test_renamed", "test_renamed_words", "test_renamed_var_only", "test_renamed_fun_only"]
+EVAL_SPLITS = ["dev", "test", "test_renamed", "test_renamed_words", "test_renamed_var_only", "test_renamed_fun_only",
+               "test_official"]
+# Transformer models trained with the CodeBERT loop: key -> (checkpoint, lr grid, micro-batch, grad checkpointing)
+MODELS = {
+    "codebert": ("microsoft/codebert-base", [1e-5, 2e-5, 3e-5], 16, False),
+    "unixcoder": ("microsoft/unixcoder-base", [1e-5, 2e-5], 16, False),
+    "codet5p_220m": ("Salesforce/codet5p-220m", [2e-5, 5e-5], 16, False),
+    "codet5p_770m": ("Salesforce/codet5p-770m", [2e-5], 8, True),
+}
 # split file -> key in metrics_summary.json, and the drop key it defines (original - this split)
 TEST_SETS = [("test", "original_test", None), ("test_renamed", "renamed_test", "drop"),
              ("test_renamed_words", "renamed_words_test", "drop_words"),
              ("test_renamed_var_only", "renamed_var_only_test", "drop_var_only"),
-             ("test_renamed_fun_only", "renamed_fun_only_test", "drop_fun_only")]
+             ("test_renamed_fun_only", "renamed_fun_only_test", "drop_fun_only"),
+             ("test_official", "official_test", None)]
 WORDS_SEED = 2026
 
 
@@ -92,8 +101,8 @@ def _lr_tag(lr: float) -> str:
     return f"{lr:.0e}".replace("-0", "-")
 
 
-def _codebert_dir(train: str, lr: float, seed: int) -> Path:
-    return MODELS_DIR / "codebert" / f"{train}_lr{_lr_tag(lr)}_seed{seed}"
+def _codebert_dir(train: str, lr: float, seed: int, model: str = "codebert") -> Path:
+    return MODELS_DIR / model / f"{train}_lr{_lr_tag(lr)}_seed{seed}"
 
 
 def _raw_minimal() -> dict:
@@ -198,6 +207,53 @@ def cmd_rename_extra(_args) -> None:
                 lines += ["Before:", "", "```c", code, "```", "", "After:", "", "```c", new, "```", ""]
     _write_json(stats, RESULTS_DIR / "renaming_stats.json")
     (RESULTS_DIR / "renaming_words_examples.md").write_text("\n".join(lines), encoding="utf-8")
+
+
+def cmd_official(_args) -> None:
+    """Official CodeXGLUE test split: all 2,732 functions, only clean_code (no de-duplication)."""
+    import pandas as pd
+
+    from src.data_prep import clean_code
+    raw = pd.read_parquet(RAW_DIR / "test.parquet")
+    df = pd.DataFrame({"id": raw["id"].astype(int), "code": raw["func"].map(clean_code),
+                       "label": raw["target"].astype(int)})
+    df.to_parquet(PROC_DIR / "test_official.parquet", index=False)
+    print("official test:", len(df), "functions,", int(df["label"].sum()), "vulnerable")
+
+
+ENSEMBLE_ALL_MODELS = ["tfidf_rf", "codebert", "unixcoder", "codet5p_220m"]
+
+
+def cmd_ensemble_all(_args) -> None:
+    """Weighted mean of P(vulnerable) of all 3-seed models; weights chosen on dev (mean macro F1 over seeds)."""
+    import itertools
+
+    import numpy as np
+    import pandas as pd
+    models = [m for m in ENSEMBLE_ALL_MODELS if all(_pred_path(m, "train", s, "dev").exists() for s in SEEDS)]
+    probs = {(m, s, sp): pd.read_csv(_pred_path(m, "train", s, sp))
+             for m in models for s in SEEDS for sp in EVAL_SPLITS if _pred_path(m, "train", s, sp).exists()}
+    best, best_w = -1.0, None
+    for w in itertools.product(range(4), repeat=len(models)):
+        if sum(w) == 0:
+            continue
+        f1s = []
+        for seed in SEEDS:
+            y = probs[(models[0], seed, "dev")]["label"].values
+            p = sum(wi * probs[(m, seed, "dev")]["prob"].values for wi, m in zip(w, models)) / sum(w)
+            f1s.append(_fast_metrics(y, (p >= 0.5).astype(int))[1])
+        if np.mean(f1s) > best:
+            best, best_w = float(np.mean(f1s)), w
+    weights = {m: wi / sum(best_w) for m, wi in zip(models, best_w)}
+    _write_json({"weights": weights, "dev_macro_f1_mean": round(best, 4), "grid": "integer weights 0..3, normalised"},
+                RESULTS_DIR / "ensemble_all_weights.json")
+    print("weights:", weights, "dev macro F1:", round(best, 4))
+    for seed in SEEDS:
+        for split in EVAL_SPLITS:
+            if all((m, seed, split) in probs for m in models):
+                base = probs[(models[0], seed, split)]
+                p = sum(weights[m] * probs[(m, seed, split)]["prob"].values for m in models)
+                _save_preds(base, p, "ensemble_all", "train", seed, split)
 
 
 def cmd_ensemble(_args) -> None:
@@ -344,16 +400,17 @@ def cmd_length_baseline(args) -> None:
 
 # ----------------------------------------------------------------------------- CodeBERT
 
-def _codebert_predict_dir(model_dir: Path, train_name: str, seed: int, splits=EVAL_SPLITS, only_missing=False) -> None:
+def _codebert_predict_dir(model_dir: Path, train_name: str, seed: int, splits=EVAL_SPLITS, only_missing=False,
+                          method: str = "codebert") -> None:
     from src import codebert_model as cb
     todo = [s for s in splits if _load_split(s) is not None
-            and not (only_missing and _pred_path("codebert", train_name, seed, s).exists())]
+            and not (only_missing and _pred_path(method, train_name, seed, s).exists())]
     if not todo:
         return
     model, tok = cb.load(str(model_dir))
     for split in todo:
         df = _load_split(split)
-        _save_preds(df, cb.predict_proba(model, tok, df["code"].tolist()), "codebert", train_name, seed, split)
+        _save_preds(df, cb.predict_proba(model, tok, df["code"].tolist()), method, train_name, seed, split)
         print(f"  predicted {split} with {model_dir.name}")
 
 
@@ -362,49 +419,56 @@ def cmd_codebert_lr_search(args) -> None:
     import pandas as pd
 
     from src import codebert_model as cb
+    key = args.model
+    hf_name, grid, micro, ckpt = MODELS[key]
     train, dev = _load_split("train"), _load_split("dev")
     LOG_DIR.mkdir(exist_ok=True)
     rows = []
-    for lr in args.lrs:
-        out = _codebert_dir("train", lr, PRIMARY_SEED)
+    for lr in (args.lrs or grid):
+        out = _codebert_dir("train", lr, PRIMARY_SEED, key)
         if (out / "train_log.json").exists() and not args.force:
             res = _read_json(out / "train_log.json")
-            print(f"lr {lr}: already done (best epoch {res['best_epoch']})")
+            print(f"{key} lr {lr}: already done (best epoch {res['best_epoch']})")
         else:
-            res = cb.train(train, dev, lr=lr, seed=PRIMARY_SEED, out_dir=str(out),
-                           log_path=str(LOG_DIR / "codebert_lr_search.log"))
+            res = cb.train(train, dev, lr=lr, seed=PRIMARY_SEED, out_dir=str(out), model_name=hf_name,
+                           micro_batch=micro, grad_ckpt=ckpt, max_epochs=args.max_epochs,
+                           log_path=str(LOG_DIR / f"{key}_lr_search.log"))
         rows.append({"lr": lr, "best_epoch": res["best_epoch"], "epochs_run": len(res["history"]),
                      **{f"dev_{k}": v for k, v in res["best_dev"].items()},
                      "total_secs": res["total_secs"],
                      "secs_per_epoch": round(sum(h["train_secs"] for h in res["history"]) / len(res["history"]), 1)})
-        pd.DataFrame(rows).to_csv(RESULTS_DIR / "codebert_lr_search.csv", index=False)
+        pd.DataFrame(rows).to_csv(RESULTS_DIR / f"{key}_lr_search.csv", index=False)
     table = pd.DataFrame(rows)
     best = table.sort_values("dev_macro_f1", ascending=False).iloc[0]
-    choice = {"learning_rate": float(best["lr"]), "best_epoch": int(best["best_epoch"]),
+    choice = {"model": hf_name, "learning_rate": float(best["lr"]), "best_epoch": int(best["best_epoch"]),
               "dev_macro_f1": float(best["dev_macro_f1"]), "batch_size": cb.EFFECTIVE_BATCH, "max_len": cb.MAX_LEN}
-    _write_json(choice, RESULTS_DIR / "codebert_best_params.json")
+    _write_json(choice, RESULTS_DIR / f"{key}_best_params.json")
     print("chosen:", choice)
-    best_dir = _codebert_dir("train", choice["learning_rate"], PRIMARY_SEED)
-    _codebert_predict_dir(best_dir, "train", PRIMARY_SEED)
-    # Checkpoint used by Try it and published as a release asset.
-    target = MODELS_DIR / "codebert_seed42"
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.copytree(best_dir, target)
+    best_dir = _codebert_dir("train", choice["learning_rate"], PRIMARY_SEED, key)
+    _codebert_predict_dir(best_dir, "train", PRIMARY_SEED, method=key)
+    if key == "codebert":
+        # Checkpoint used by Try it and published as a release asset.
+        target = MODELS_DIR / "codebert_seed42"
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(best_dir, target)
 
 
 def cmd_codebert_seeds(args) -> None:
     """Train the remaining seeds with the chosen learning rate and predict all available splits."""
     from src import codebert_model as cb
-    lr = _read_json(RESULTS_DIR / "codebert_best_params.json")["learning_rate"]
+    key = getattr(args, "model", "codebert")
+    hf_name, _, micro, ckpt = MODELS[key]
+    lr = _read_json(RESULTS_DIR / f"{key}_best_params.json")["learning_rate"]
     train_name = args.train
     train, dev = _load_split(train_name), _load_split("dev")
     for seed in args.seeds:
-        out = _codebert_dir(train_name, lr, seed)
+        out = _codebert_dir(train_name, lr, seed, key)
         if not (out / "train_log.json").exists() or args.force:
-            cb.train(train, dev, lr=lr, seed=seed, out_dir=str(out),
-                     log_path=str(LOG_DIR / f"codebert_{train_name}_seeds.log"))
-        _codebert_predict_dir(out, train_name, seed)
+            cb.train(train, dev, lr=lr, seed=seed, out_dir=str(out), model_name=hf_name, micro_batch=micro,
+                     grad_ckpt=ckpt, max_epochs=getattr(args, "max_epochs", 8),
+                     log_path=str(LOG_DIR / f"{key}_{train_name}_seeds.log"))
+        _codebert_predict_dir(out, train_name, seed, method=key)
 
 
 def cmd_augment(args) -> None:
@@ -419,13 +483,16 @@ def cmd_augment(args) -> None:
 def cmd_predict_missing(_args) -> None:
     """Predict splits that did not exist when a model was trained (e.g. test_renamed)."""
     from src import tfidf_rf
-    for d in sorted((MODELS_DIR / "codebert").glob("*_seed*")):
-        train_name, rest = d.name.split("_lr")
-        seed = int(rest.split("_seed")[1])
-        lr = float(rest.split("_seed")[0])
-        best = _read_json(RESULTS_DIR / "codebert_best_params.json", {}).get("learning_rate")
-        if best is not None and abs(lr - best) < 1e-12:
-            _codebert_predict_dir(d, train_name, seed, only_missing=True)
+    for key in MODELS:
+        best = _read_json(RESULTS_DIR / f"{key}_best_params.json", {}).get("learning_rate")
+        for d in sorted((MODELS_DIR / key).glob("*_seed*")):
+            if not (d / "train_log.json").exists():
+                continue                      # unfinished run
+            train_name, rest = d.name.split("_lr")
+            seed = int(rest.split("_seed")[1])
+            lr = float(rest.split("_seed")[0])
+            if best is not None and abs(lr - best) < 1e-12:
+                _codebert_predict_dir(d, train_name, seed, only_missing=True, method=key)
     for f in sorted((MODELS_DIR / "tfidf_rf").glob("*_seed*.joblib")):
         train_name, seed = f.stem.rsplit("_seed", 1)
         model = None
@@ -747,6 +814,11 @@ def cmd_summarize(_args) -> None:
         # A constant score ranks nothing: ROC AUC is 0.5 by definition.
         mb_block["roc_auc"] = 0.5
         summary["majority_baseline"] = {"original_test": mb_block}
+        off = _load_split("test_official")
+        if off is not None:
+            mo = evaluation.majority_baseline(train["label"].values, off["label"].values)
+            summary["majority_baseline"]["official_test"] = {**{k: (_r4(v) if isinstance(v, float) else v)
+                                                                 for k, v in mo.items()}, "roc_auc": 0.5}
 
     all_rows = []
     tf_best = _read_json(RESULTS_DIR / "tfidf_best_params.json", {})
@@ -787,6 +859,23 @@ def cmd_summarize(_args) -> None:
         all_rows += rows
         summary["ensemble_head_tail"] = {"model": "mean of P(vulnerable) from TF-IDF + RF and head+tail CodeBERT",
                                          "original_test": block["original_test"], "n_seeds": block["n_seeds"]}
+
+    for key in ("unixcoder", "codet5p_220m", "codet5p_770m"):
+        block, rows = _method_block(evaluation, key, "train", SEEDS)
+        if block.get("n_seeds"):
+            all_rows += rows
+            summary[key] = {"best_params": _read_json(RESULTS_DIR / f"{key}_best_params.json", {}), **block}
+            summary[key]["best_params"]["best_epoch_per_seed"] = {
+                f"seed{s}": (_read_json(_codebert_dir("train", summary[key]["best_params"]["learning_rate"], s, key)
+                                        / "train_log.json") or {}).get("best_epoch") for s in SEEDS}
+    block, rows = _method_block(evaluation, "ensemble_all", "train", SEEDS)
+    if block.get("n_seeds"):
+        all_rows += rows
+        summary["ensemble_all"] = {"weights": (_read_json(RESULTS_DIR / "ensemble_all_weights.json", {}) or {}).get("weights"),
+                                   **block}
+    summary["official_test"] = {m: summary[m]["official_test"] for m in
+                                ("majority_baseline", "tfidf_rf", "codebert", "unixcoder", "codet5p_220m", "codet5p_770m",
+                                 "ensemble", "ensemble_all") if "official_test" in summary.get(m, {})}
 
     aug = {"seeds_used": []}
     for method in ("tfidf_rf", "codebert", "ensemble"):
@@ -950,12 +1039,19 @@ def main() -> None:
     p.add_argument("--seeds", type=int, nargs="+", default=SEEDS)
     p.set_defaults(func=cmd_tfidf_seeds)
 
+    sub.add_parser("official").set_defaults(func=cmd_official)
+    sub.add_parser("ensemble-all").set_defaults(func=cmd_ensemble_all)
+
     p = sub.add_parser("codebert-lr-search")
-    p.add_argument("--lrs", type=float, nargs="+", default=LR_GRID)
+    p.add_argument("--model", default="codebert", choices=list(MODELS))
+    p.add_argument("--max-epochs", type=int, default=8)
+    p.add_argument("--lrs", type=float, nargs="+", default=None)
     p.add_argument("--force", action="store_true")
     p.set_defaults(func=cmd_codebert_lr_search)
 
     p = sub.add_parser("codebert-seeds")
+    p.add_argument("--model", default="codebert", choices=list(MODELS))
+    p.add_argument("--max-epochs", type=int, default=8)
     p.add_argument("--train", default="train", choices=["train", "train_augmented"])
     p.add_argument("--seeds", type=int, nargs="+", default=[123, 2026])
     p.add_argument("--force", action="store_true")
