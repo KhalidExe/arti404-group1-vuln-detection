@@ -54,8 +54,9 @@ def get_device() -> torch.device:
 
 
 def load_tokenizer(name: str = MODEL_NAME):
-    """CodeBERT's byte-level BPE tokenizer."""
-    return AutoTokenizer.from_pretrained(name)
+    """Byte-level BPE tokenizer of the checkpoint (CodeBERT by default)."""
+    from src.pretrained_models import load_tokenizer as _load
+    return _load(name)
 
 
 def token_lengths(tokenizer, codes: list[str]) -> np.ndarray:
@@ -326,7 +327,7 @@ def train(
 def load(model_dir: str):
     """Load a saved checkpoint. Returns ``(model, tokenizer)`` on GPU if available, in eval mode."""
     from src import pretrained_models
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    tokenizer = pretrained_models.load_tokenizer(model_dir)
     model = pretrained_models.load_model(model_dir)
     model.to(get_device()).eval()
     return model, tokenizer

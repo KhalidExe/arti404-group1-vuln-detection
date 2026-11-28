@@ -52,19 +52,43 @@ class T5EncoderClassifier(nn.Module):
 
     @classmethod
     def from_saved(cls, model_dir) -> "T5EncoderClassifier":
-        model = cls(T5EncoderModel.from_pretrained(Path(model_dir) / "encoder"))
+        model = cls(T5EncoderModel.from_pretrained(Path(model_dir) / "encoder", dtype=torch.float32))
         model.head.load_state_dict(torch.load(Path(model_dir) / "head.pt", map_location="cpu"))
         return model
 
 
+def load_tokenizer(name: str):
+    """Tokenizer of a checkpoint or of a saved model folder.
+
+    The CodeT5+ tokenizer config on the Hub does not load with this transformers version
+    (TypeError in add_tokens), so the same byte-level BPE tokenizer is rebuilt from its
+    vocab.json + merges.txt with the tokenizers library: <s> text </s>, <pad> = 0.
+    """
+    from transformers import AutoTokenizer, PreTrainedTokenizerFast
+    try:
+        return AutoTokenizer.from_pretrained(name)
+    except TypeError:
+        from huggingface_hub import hf_hub_download
+        from tokenizers import ByteLevelBPETokenizer
+        from tokenizers.processors import RobertaProcessing
+        bpe = ByteLevelBPETokenizer(hf_hub_download(name, "vocab.json"), hf_hub_download(name, "merges.txt"),
+                                    add_prefix_space=False)
+        bpe._tokenizer.post_processor = RobertaProcessing(("</s>", bpe.token_to_id("</s>")),
+                                                          ("<s>", bpe.token_to_id("<s>")))
+        return PreTrainedTokenizerFast(tokenizer_object=bpe._tokenizer, bos_token="<s>", eos_token="</s>",
+                                       unk_token="<unk>", pad_token="<pad>", mask_token="<mask>",
+                                       cls_token="<s>", sep_token="</s>", model_max_length=512)
+
+
 def build_model(hf_name: str, grad_ckpt: bool = False) -> nn.Module:
-    """New classifier on top of a pretrained checkpoint."""
+    """New classifier on top of a pretrained checkpoint (weights in fp32; training uses bf16 autocast)."""
     if model_kind(hf_name) == "t5enc":
-        model = T5EncoderClassifier(T5EncoderModel.from_pretrained(hf_name))
+        model = T5EncoderClassifier(T5EncoderModel.from_pretrained(hf_name, dtype=torch.float32))
         if grad_ckpt:
             model.encoder.gradient_checkpointing_enable()
         return model
-    model = AutoModelForSequenceClassification.from_pretrained(hf_name, num_labels=2, attn_implementation="sdpa")
+    model = AutoModelForSequenceClassification.from_pretrained(hf_name, num_labels=2, attn_implementation="sdpa",
+                                                               dtype=torch.float32)
     if grad_ckpt:
         model.gradient_checkpointing_enable()
     return model
@@ -83,4 +107,4 @@ def load_model(model_dir) -> nn.Module:
     kind = json.loads(kind_path.read_text())["kind"] if kind_path.exists() else "seqcls"
     if kind == "t5enc":
         return T5EncoderClassifier.from_saved(model_dir)
-    return AutoModelForSequenceClassification.from_pretrained(model_dir, attn_implementation="sdpa")
+    return AutoModelForSequenceClassification.from_pretrained(model_dir, attn_implementation="sdpa", dtype=torch.float32)
